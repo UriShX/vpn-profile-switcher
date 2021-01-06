@@ -1,11 +1,21 @@
 #!/bin/sh
 
+###
+# Script for keeping OpenVPN connected to the recommended NordVPN server on OpenWRT
+#
+# NordVPN API documentation by Milosz Galazka, at: https://blog.sleeplessbeastie.eu/2019/02/18/how-to-use-public-nordvpn-api/
+#
+# Uri Shani, 2020
+###
+
 function get_recommended() {
-    RECOMMENDED=$(curl --silent "https://api.nordvpn.com/v1/servers/recommendations?filter\[server_groups\]\[identifier\]=legacy_p2p" | jq --raw-output 'limit(1;.[]) | "\(.hostname)"')
+    echo "Getting list of recommended servers"
+    RECOMMENDED=$(curl "https://api.nordvpn.com/v1/servers/recommendations?filter\[server_groups\]\[identifier\]=legacy_p2p" | jsonfilter -e '$[0].hostname')
 }
 
 function get_configs() {
-    wget https://downloads.nordcdn.com/configs/archives/servers/ovpn.zip
+    # wget https://downloads.nordcdn.com/configs/archives/servers/ovpn.zip
+    eval wget https://downloads.nordcdn.com/configs/files/ovpn_udp/servers/$1.udp.ovpn
 }
 
 function check_in_configs() {
@@ -17,12 +27,14 @@ function check_enabled() {
 }
 
 function unzip_and_edit_in_place() {
-    unzip -jo ovpn.zip "ovpn_udp/$RECOMMENDED.udp.ovpn" -d /etc/openvpn/
+    # unzip -jo ovpn.zip "ovpn_udp/$RECOMMENDED.udp.ovpn" -d /etc/openvpn/
+    get_configs $RECOMMENDED
+    mv $RECOMMENDED.udp.ovpn /etc/openvpn/
     sed -i "s/auth-user-pass/auth-user-pass secret/g" /etc/openvpn/$RECOMMENDED.udp.ovpn
 }
 
 function create_new_entry() {
-    NEW_SERVER=$(echo "$RECOMMENDED" | sed 's/\./_/g')
+    NEW_SERVER=$(echo "$RECOMMENDED" | sed 's/\./_/g' | sed 's/com/udp/g')
     uci set openvpn.$NEW_SERVER=openvpn
     uci set openvpn.$NEW_SERVER.config="/etc/openvpn/$RECOMMENDED.udp.ovpn"
     uci commit openvpn
@@ -34,7 +46,7 @@ function enable_existing_entry() {
 }
 
 function disable_current_entry() {
-    eval uci set openvpn.$1.enabled='0'
+    eval uci del openvpn.$1.enabled
     uci commit openvpn
 }
 
@@ -52,10 +64,10 @@ echo $RECOMMENDED
 check_in_configs
 if [ -z "$SERVER_NAME" ]; then
     echo "Server does not exist"
-    if test ! -f "ovpn.zip"; then
-        echo "Downloading configs..."
-        get_configs
-    fi
+    # if test ! -f "ovpn.zip"; then
+    #     echo "Downloading configs..."
+    #     get_configs
+    # fi
     echo "Copying and adding to OpenVPN configs"
     unzip_and_edit_in_place
     echo "Adding new entry to OpenVPN configs and enabling the new entry"
@@ -65,8 +77,9 @@ else
 fi
 check_enabled
 echo $ENABLED_SERVER
-if [ "$ENABLED_SERVER" == "$SERVER_NAME" ]; then
+if [ $ENABLED_SERVER == $SERVER_NAME ]; then
     echo "Recommended server is already configured as active"
+    exit
 else
     if [ -z "$NEW_SERVER" ]; then
         echo "Enabling existing entry"

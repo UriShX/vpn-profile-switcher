@@ -14,5 +14,5 @@ jobs:
         uses: actions-x/commit@v2
         with:
           branch: db
-          files: countries.tsv server-groups.tsv
+          files: countries.tsv server-groups.tsv dump.json
           force: true

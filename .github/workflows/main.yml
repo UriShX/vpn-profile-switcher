@@ -10,5 +10,9 @@ jobs:
         uses: urishx/curl-then-jq-shell-action@v1
         with:
           who-to-greet: 'Mona the Octocat'
-      - run: echo random-number ${{ steps.foo.outputs.random-number }}
-        shell: bash
+      - name: push
+        uses: actions-x/commit@v2
+        with:
+          branch: db
+          files: countries.tsv server-groups.tsv
+          force: true

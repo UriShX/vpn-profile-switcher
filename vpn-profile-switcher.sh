@@ -42,7 +42,7 @@ function check_required() {
     fi
 }
 
-function country_city_code() {
+function country_code() {
     case $1 in
     '' | *[!0-9]*)
         if [ ! -f "countries.tsv" ]; then
@@ -100,12 +100,12 @@ function get_recommended() {
     fi
     URL=${URL}"limit=1"
     echo $URL
-    RECOMMENDED=$(curl "$URL" | jsonfilter -e '$[0].hostname')
+    RECOMMENDED=$(curl --silent "$URL" | jsonfilter -e '$[0].hostname')
 }
 
 function get_configs() {
     # wget https://downloads.nordcdn.com/configs/archives/servers/ovpn.zip
-    eval wget https://downloads.nordcdn.com/configs/files/ovpn_$PROTOCOL/servers/$1.$PROTOCOL.ovpn
+    eval wget -q https://downloads.nordcdn.com/configs/files/ovpn_$PROTOCOL/servers/$1.$PROTOCOL.ovpn
 }
 
 function check_in_configs() {
@@ -125,7 +125,7 @@ function unzip_and_edit_in_place() {
 }
 
 function create_new_entry() {
-    NEW_SERVER=$(echo "$RECOMMENDED" | sed 's/\./_/g' | sed 's/com/$PROTOCOL/g')
+    NEW_SERVER=$(echo "$RECOMMENDED" | sed 's/\./_/g' | eval sed 's/com/$PROTOCOL/g')
     uci set openvpn.$NEW_SERVER=openvpn
     uci set openvpn.$NEW_SERVER.config="/etc/openvpn/$RECOMMENDED.$PROTOCOL.ovpn"
     uci commit openvpn
@@ -173,7 +173,7 @@ while [ ! -z "$1" ]; do
         ;;
     -c | --country)
         shift
-        COUNTRY_ID=$(country_city_code $1 "country")
+        COUNTRY_ID=$(country_code $1 "country")
         ;;
     -g | --group)
         shift
@@ -203,36 +203,36 @@ if [ -z "$RECOMMENDED" ]; then
     echo "Could not get recommended server, exiting script"
     exit
 fi
-echo $RECOMMENDED
-# check_in_configs
-# if [ -z "$SERVER_NAME" ]; then
-#     echo "Server does not exist"
-#     # if test ! -f "ovpn.zip"; then
-#     #     echo "Downloading configs..."
-#     #     get_configs
-#     # fi
-#     echo "Copying and adding to OpenVPN configs"
-#     unzip_and_edit_in_place
-#     echo "Adding new entry to OpenVPN configs and enabling the new entry"
-#     create_new_entry
-# else
-#     echo "Server name: $SERVER_NAME"
-# fi
-# check_enabled
-# echo $ENABLED_SERVER
-# if [ $ENABLED_SERVER == $SERVER_NAME ]; then
-#     echo "Recommended server is already configured as active"
-#     exit
-# else
-#     if [ -z "$NEW_SERVER" ]; then
-#         echo "Enabling existing entry"
-#         enable_existing_entry $SERVER_NAME
-#     else
-#         echo "Enabling new entry"
-#         enable_existing_entry $NEW_SERVER
-#     fi
-#     echo "Disabling current active server and enabling the recommended one"
-#     disable_current_entry $ENABLED_SERVER
-# fi
-# echo "Restarting OpenVPN"
-# restart_openvpn
+echo "Recommended server: $RECOMMENDED"
+check_in_configs
+if [ -z "$SERVER_NAME" ]; then
+    echo "Server does not exist"
+    # if test ! -f "ovpn.zip"; then
+    #     echo "Downloading configs..."
+    #     get_configs
+    # fi
+    echo "Copying and adding to OpenVPN configs"
+    unzip_and_edit_in_place
+    echo "Adding new entry to OpenVPN configs and enabling the new entry"
+    create_new_entry
+else
+    echo "Server name: $SERVER_NAME"
+fi
+check_enabled
+echo "Currently active server: $ENABLED_SERVER"
+if [ "$ENABLED_SERVER" == "$SERVER_NAME" ]; then
+    echo "Recommended server is already configured as active"
+    exit
+else
+    if [ -z "$NEW_SERVER" ]; then
+        echo "Enabling existing entry"
+        enable_existing_entry $SERVER_NAME
+    else
+        echo "Enabling new entry"
+        enable_existing_entry $NEW_SERVER
+    fi
+    echo "Disabling current active server"
+    disable_current_entry $ENABLED_SERVER
+fi
+echo "Restarting OpenVPN"
+restart_openvpn

@@ -62,8 +62,6 @@ function server_groups() {
 }
 
 function get_recommended() {
-    echo $PROTOCOL $COUNTRY_ID $GROUP_IDENTIFIER $SECRET
-    echo "Getting list of recommended servers"
     URL="https://api.nordvpn.com/v1/servers/recommendations?"
     if [ ! -z "$GROUP_IDENTIFIER" ]; then
         URL=${URL}"filters[servers_groups][identifier]="${GROUP_IDENTIFIER}"&"
@@ -85,7 +83,7 @@ function check_enabled() {
     ENABLED_SERVER=$(uci show openvpn | grep "enabled='1'" | awk -F '\.' '/.*/{print $2}')
 }
 
-function unzip_and_edit_in_place() {
+function grab_and_edit_config() {
     wget -q https://downloads.nordcdn.com/configs/files/ovpn_$PROTOCOL/servers/$RECOMMENDED.$PROTOCOL.ovpn
     mv $RECOMMENDED.$PROTOCOL.ovpn /etc/openvpn/
     sed -i "s/auth-user-pass/auth-user-pass $SECRET/g" /etc/openvpn/$RECOMMENDED.$PROTOCOL.ovpn
@@ -106,6 +104,7 @@ function disable_current_entry() {
 }
 
 function restart_openvpn() {
+    uci commit openvpn
     /etc/init.d/openvpn restart
 }
 
@@ -140,31 +139,39 @@ while [ ! -z "$1" ]; do
         SECRET="$1"
         ;;
     *)
-        echo "Incorrect input provided"
+        logger -s "($0) Incorrect input provided"
         show_usage
         ;;
     esac
     shift
 done
 
+logger -s "($0) Arguments: Protocol: $PROTOCOL; Country: $COUNTRY_ID; NordVPN group: $GROUP_IDENTIFIER; User secrets: $SECRET."
+
 get_recommended
+
 if [ -z "$RECOMMENDED" ]; then
     logger -s "($0) Could not get recommended VPN, exiting script"
     exit
 fi
-logger -s "($0) Recommended server URL: $RECOMMENDED. Protocol: $PROTOCOL"
+
+logger -s "($0) Recommended server URL: $RECOMMENDED."
+
 check_in_configs
+
 if [ -z "$SERVER_NAME" ]; then
-    echo "Server does not exist"
-    logger -s "($0) Copying and adding to OpenVPN configs"
-    unzip_and_edit_in_place
-    logger -s "($0) Adding new entry to OpenVPN configs"
+    logger -s "($0) Fetching OpenVPN config $RECOMMENDED.$PROTOCOL.ovpn, and setting credentials"
+    grab_and_edit_config
+    logger -s "($0) Adding new entry to OpenVPN configs: $NEW_SERVER"
     create_new_entry
 else
     logger -s "($0) Server name: $SERVER_NAME"
 fi
+
 check_enabled
+
 logger -s "($0) Currently active server: $ENABLED_SERVER"
+
 if [ "$ENABLED_SERVER" == "$SERVER_NAME" ]; then
     logger -s "($0) Recommended server is already configured as active"
     exit
@@ -178,8 +185,8 @@ else
     fi
     logger -s "($0) Disabling current active server"
     disable_current_entry $ENABLED_SERVER
-
-    uci commit openvpn
 fi
-logger -s "($0) Restarting OpenVPN"
+
+logger -s "($0) Comitting changes and restarting OpenVPN"
+
 restart_openvpn

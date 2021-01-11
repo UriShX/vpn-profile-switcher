@@ -11,9 +11,7 @@
 set -e
 
 PROTOCOL="udp"
-OVPN_PATH="/etc/openvpn"
 SECRET="secret"
-VPN_PROVIDER="nordvpn"
 
 function show_usage() {
     printf "Usage: $0 [options <parameters>]\n"
@@ -78,10 +76,6 @@ function get_recommended() {
     RECOMMENDED=$(wget -q -O - "$URL" | jsonfilter -e '$[0].hostname')
 }
 
-function get_configs() {
-    eval wget -q https://downloads.nordcdn.com/configs/files/ovpn_$PROTOCOL/servers/$1.$PROTOCOL.ovpn
-}
-
 function check_in_configs() {
     # Config files: uci show openvpn | grep nordvpn | awk -F '=' '/config/{print $2}' | sed "s/'//g"
     # Config name: uci show openvpn | grep $RECOMMENDED.$PROTOCOL | awk -F '\.' '/config/{print $2}'
@@ -94,8 +88,7 @@ function check_enabled() {
 }
 
 function unzip_and_edit_in_place() {
-    # get_configs $RECOMMENDED
-    eval wget -q https://downloads.nordcdn.com/configs/files/ovpn_$PROTOCOL/servers/$RECOMMENDED.$PROTOCOL.ovpn
+    wget -q https://downloads.nordcdn.com/configs/files/ovpn_$PROTOCOL/servers/$RECOMMENDED.$PROTOCOL.ovpn
     mv $RECOMMENDED.$PROTOCOL.ovpn /etc/openvpn/
     sed -i "s/auth-user-pass/auth-user-pass $SECRET/g" /etc/openvpn/$RECOMMENDED.$PROTOCOL.ovpn
 }
@@ -165,10 +158,6 @@ logger -s "($0) Recommended server URL: $RECOMMENDED. Protocol: $PROTOCOL"
 check_in_configs
 if [ -z "$SERVER_NAME" ]; then
     echo "Server does not exist"
-    # if test ! -f "ovpn.zip"; then
-    #     echo "Downloading configs..."
-    #     get_configs
-    # fi
     logger -s "($0) Copying and adding to OpenVPN configs"
     unzip_and_edit_in_place
     logger -s "($0) Adding new entry to OpenVPN configs"

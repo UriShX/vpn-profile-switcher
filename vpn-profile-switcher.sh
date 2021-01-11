@@ -75,7 +75,6 @@ function get_recommended() {
 }
 
 function check_in_configs() {
-    # Config files: uci show openvpn | grep nordvpn | awk -F '=' '/config/{print $2}' | sed "s/'//g"
     SERVER_NAME=$(uci show openvpn | grep $RECOMMENDED.$PROTOCOL | awk -F '\.' '/config/{print $2}')
 }
 
@@ -101,6 +100,41 @@ function enable_existing_entry() {
 
 function disable_current_entry() {
     eval uci del openvpn.$1.enabled
+}
+
+function list_ovpn_configs() {
+    uci show openvpn | grep nordvpn | while read y; do
+        if [ "$1" == 'files' ]; then
+            echo $(awk -F '=' '/config/{print $2}' | sed "s/'//g")
+        elif [ "$1" == 'names' ]; then
+            echo $(awk -F '.' '/config/{print $2}')
+        else
+            logger -s "($0) bad argument $1 in list_ovpn_configs()"
+        fi
+    done
+}
+
+function remove_unused() {
+    NORDVPN_CONFIGS=$(list_ovpn_configs names)
+    NORDVPN_FILES=$(list_ovpn_configs files)
+
+    for X in $NORDVPN_CONFIGS; do
+        if [ ! "$X" == "$SERVER_NAME" ] && [ ! "$X" == "$NEW_SERVER" ] && [ ! "$X" == "$ENABLED_SERVER" ]; then
+            uci del openvpn.$X
+        fi
+    done
+
+    uci commit
+
+    ENABLED_FILE=$(uci show openvpn.$ENABLED_SERVER.config | awk -F '=' '{print $2}' | sed "s/'//g")
+    EXISTING_FILE=$(uci show openvpn.$SERVER_NAME.config | awk -F '=' '{print $2}' | sed "s/'//g")
+    NEW_FILE=$(uci show openvpn.$NEW_SERVER.config | awk -F '=' '{print $2}' | sed "s/'//g")
+
+    for X in $NORDVPN_FILES; do
+        if [ ! "$X" == "$ENABLED_FILE" ] && [ ! "$X" == "$EXISTING_FILE" ] && [ ! "$X" == "$NEW_FILE" ]; then
+            rm $X
+        fi
+    done
 }
 
 function restart_openvpn() {
@@ -146,7 +180,7 @@ while [ ! -z "$1" ]; do
     shift
 done
 
-logger -s "($0) Arguments: Protocol: $PROTOCOL; Country: $COUNTRY_ID; NordVPN group: $GROUP_IDENTIFIER; User secrets: $SECRET."
+logger -s "($0) Arguments: Protocol: $PROTOCOL; Country: $COUNTRY_ID; NordVPN group: $GROUP_IDENTIFIER; User credentials: $SECRET."
 
 get_recommended
 
@@ -190,3 +224,6 @@ fi
 logger -s "($0) Comitting changes and restarting OpenVPN"
 
 restart_openvpn
+
+printf "($0) Removing unused NordVPN profiles, leaving current and last used."
+remove_unused

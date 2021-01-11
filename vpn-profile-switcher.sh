@@ -37,6 +37,15 @@ function check_required() {
     fi
 }
 
+function verify_protocol() {
+    if [ ! "$1" == "tcp" ] && [ ! "$1" == "udp" ]; then
+        logger -s "($0) Protocol must be either udp or tcp, your input was: $1."
+        exit 1
+    else
+        echo $1
+    fi
+}
+
 function country_code() {
     IDENTIFIER=$(wget -q -O - "https://raw.githubusercontent.com/urishx/vpn-profile-switcher/db/countries.tsv" | grep -iw "$1" | awk -F '\t' '/[0-9]+/{print $1}')
 
@@ -158,7 +167,7 @@ while [ ! -z "$1" ]; do
         ;;
     -p | --protocol)
         shift
-        PROTOCOL="$1"
+        PROTOCOL=$(verify_protocol $1)
         ;;
     -c | --country)
         shift
@@ -225,5 +234,5 @@ logger -s "($0) Comitting changes and restarting OpenVPN"
 
 restart_openvpn
 
-printf "($0) Removing unused NordVPN profiles, leaving current and last used."
+logger -s "($0) Removing unused NordVPN profiles, leaving current and last used."
 remove_unused

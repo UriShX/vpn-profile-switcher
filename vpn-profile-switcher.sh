@@ -1,11 +1,18 @@
 #!/bin/sh
 
 ###
-# Script for keeping OpenVPN connected to the recommended NordVPN server on OpenWRT
+# vpn-profile-switcher.sh v1.0.0
+#
+# Script for getting the recommended NordVPN server, downloading the server's OpenVPN config file,
+# setting credentials, and configuring OpenWRT for using said server.
+#
+# For more details see README on: https://github.com/UriShX/vpn-profile-switcher
+# or run ./vpn-profile-switcher.sh -h
+#
+# Written by Uri Shani, 2021
+# MIT License
 #
 # NordVPN API documentation by Milosz Galazka, at: https://blog.sleeplessbeastie.eu/2019/02/18/how-to-use-public-nordvpn-api/
-#
-# Uri Shani, 2020
 ###
 
 set -e
@@ -14,14 +21,16 @@ PROTOCOL="udp"
 SECRET="secret"
 
 function show_usage() {
-    printf "Usage: $0 [options <parameters>]\n"
-    printf "\n"
+    printf "vpn-profile-switcher.sh v1.0.0\n"
+    printf "Get NordVPN recommended profile and set OpenVPN on OpenWRT to use said profile.\n\n"
+    printf "Usage: $0 [options <parameters>]\n\n"
     printf "Options: \n"
-    printf "  -h | --help,\t\t\t\t\tPrint this help message\n"
-    printf "  -p | --protocol < udp | tcp >,\t\tSelect either UDP or TCP connection. Default is UDP.\n"
-    printf "  -c | --country < name | abbreviation >,\tSelect Country to filter by. Default is closest to your location.\n"
-    printf "  -g | --group < group_name >,\t\t\tSelect group to filter by.\n"
-    printf "  -l | --login-info < filename >,\t\tSpecify file for VPN login credentials. Default is 'secret'.\n"
+    printf "  -h | --help,\t\t\t\tPrint this help message\n"
+    printf "  -p | --protocol < udp | tcp >,\tSelect either UDP or TCP connection. Default is UDP.\n"
+    printf "  -c | --country < code | name >,\tSelect Country to filter by. Default is closest to your location.\n"
+    printf "  -g | --group < group_name >,\t\tSelect group to filter by.\n"
+    printf "  -l | --login-info < filename >,\tSpecify file for VPN login credentials. Default is 'secret'.\n"
+    printf "\nFor more information see README in repo: https://github.com/UriShX/vpn-profile-switcher\n"
 
     exit
 }
@@ -208,7 +217,7 @@ if [ -z "$SERVER_NAME" ]; then
     logger -s "($0) Adding new entry to OpenVPN configs: $NEW_SERVER"
     create_new_entry
 else
-    logger -s "($0) Server name: $SERVER_NAME"
+    logger -s "($0) Recommended server name: $SERVER_NAME"
 fi
 
 check_enabled

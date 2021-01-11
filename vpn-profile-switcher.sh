@@ -24,30 +24,27 @@ function show_usage() {
     printf "  -c | --country < name | abbreviation >,\tSelect Country to filter by. Default is closest to your location.\n"
     printf "  -g | --group < group_name >,\t\t\tSelect group to filter by.\n"
     printf "  -l | --login-info < filename >,\t\tSpecify file for VPN login credentials. Default is 'secret'.\n"
-    printf "  -d | --directory < /config/path >,\t\tSpecify path for storing OpenVPN configurations. Default is /etc/openvpn.\n"
-    printf "  -s | --save-configs,\t\t\t\tSpecify if configuration files are stored on device. Requires approx. 26MB and unzip.\n"
 
     exit
 }
 
 function check_required() {
-    CURL=$(which curl)
     WGET=$(which wget)
     JSONFILTER=$(which jsonfilter)
-    UNZIP=$(which unzip)
 
-    if [ ! $CURL ] || [ ! $WGET ] || [ ! $JSONFILTER ] || [ ! $UNZIP ]; then
-        printf "You must have the required packages installed: curl unzip\n"
+    if [ ! $WGET ] || [ ! $JSONFILTER ]; then
+        # wget: SSL support not available, please install one of the libustream-.*[ssl|tls] packages as well as the ca-bundle and ca-certificates packages.
+        logger -s "($0) You must have the required packages installed: wget jsonfilter\n"
         exit 1
     fi
 }
 
-function country_city_code() {
-    # IDENTIFIER=$(curl --silent "https://raw.githubusercontent.com/urishx/vpn-profile-switcher/db/countries.tsv" | grep -iw "$1" | awk -F '\t' '/[0-9]+/{print $1}')
+function country_code() {
     IDENTIFIER=$(wget -q -O - "https://raw.githubusercontent.com/urishx/vpn-profile-switcher/db/countries.tsv" | grep -iw "$1" | awk -F '\t' '/[0-9]+/{print $1}')
 
     if [ -z "$IDENTIFIER" ]; then
-        logger -s "The query you entered ("$1") could not be found in the countries databse."
+        logger -s "($0) The query you entered ("$1") could not be found in the countries databse."
+        logger -s "($0) You can view the list of countries in which NordVPN has servers online: https://github.com/urishx/vpn-profile-switcher/blob/db/countries.tsv"
         exit 1
     else
         echo "$IDENTIFIER"
@@ -55,11 +52,11 @@ function country_city_code() {
 }
 
 function server_groups() {
-    # IDENTIFIER=$(curl --silent "https://raw.githubusercontent.com/urishx/vpn-profile-switcher/db/server-groups.tsv" | grep -iw "$1" | awk -F '\t' '/.*/{print $2}')
     IDENTIFIER=$(wget -q -O - "https://raw.githubusercontent.com/urishx/vpn-profile-switcher/db/server-groups.tsv" | grep -iw "$1" | awk -F '\t' '/.*/{print $2}')
 
     if [ -z "$IDENTIFIER" ]; then
-        logger -s "The query you entered ("$1") could not be found in the server groups databse."
+        logger -s "($0) The query you entered ("$1") could not be found in the server groups databse."
+        logger -s "($0) You can view the list of NordVPN server groups online: https://github.com/urishx/vpn-profile-switcher/blob/db/server-groups.tsv"
         exit 1
     else
         echo "$IDENTIFIER"
@@ -67,23 +64,21 @@ function server_groups() {
 }
 
 function get_recommended() {
-    echo $PROTOCOL $VPN_PROVIDER $COUNTRY_ID $CITY_ID $GROUP_IDENTIFIER $SECRET $OVPN_PATH $SAVE_CONFIGS
+    echo $PROTOCOL $COUNTRY_ID $GROUP_IDENTIFIER $SECRET
     echo "Getting list of recommended servers"
     URL="https://api.nordvpn.com/v1/servers/recommendations?"
     if [ ! -z "$GROUP_IDENTIFIER" ]; then
-        URL=${URL}"filters\[servers_groups\]\[identifier\]="${GROUP_IDENTIFIER}"&"
+        URL=${URL}"filters[servers_groups][identifier]="${GROUP_IDENTIFIER}"&"
     fi
     if [ ! -z "$COUNTRY_ID" ]; then
-        URL=${URL}"filters\[country_id\]="${COUNTRY_ID}"&"
+        URL=${URL}"filters[country_id]="${COUNTRY_ID}"&"
     fi
     URL=${URL}"limit=1"
-    logger -s "Fetching VPN recommendations from: $URL"
-    # RECOMMENDED=$(curl --silent "$URL" | jsonfilter -e '$[0].hostname')
+    logger -s "($0) Fetching VPN recommendations from: $URL"
     RECOMMENDED=$(wget -q -O - "$URL" | jsonfilter -e '$[0].hostname')
 }
 
 function get_configs() {
-    # wget https://downloads.nordcdn.com/configs/archives/servers/ovpn.zip
     eval wget -q https://downloads.nordcdn.com/configs/files/ovpn_$PROTOCOL/servers/$1.$PROTOCOL.ovpn
 }
 
@@ -99,11 +94,10 @@ function check_enabled() {
 }
 
 function unzip_and_edit_in_place() {
-    # consider using bsdtar eg.: bsdtar -x -f ovpn.zip ovpn_*/il53*udp*
-    # unzip -jo ovpn.zip "ovpn_udp/$RECOMMENDED.udp.ovpn" -d /etc/openvpn/
-    get_configs $RECOMMENDED
+    # get_configs $RECOMMENDED
+    eval wget -q https://downloads.nordcdn.com/configs/files/ovpn_$PROTOCOL/servers/$RECOMMENDED.$PROTOCOL.ovpn
     mv $RECOMMENDED.$PROTOCOL.ovpn /etc/openvpn/
-    sed -i "s/auth-user-pass/auth-user-pass secret/g" /etc/openvpn/$RECOMMENDED.$PROTOCOL.ovpn
+    sed -i "s/auth-user-pass/auth-user-pass $SECRET/g" /etc/openvpn/$RECOMMENDED.$PROTOCOL.ovpn
 }
 
 function create_new_entry() {
@@ -144,7 +138,7 @@ while [ ! -z "$1" ]; do
         ;;
     -c | --country)
         shift
-        COUNTRY_ID=$(country_city_code $1 "country")
+        COUNTRY_ID=$(country_code $1)
         ;;
     -g | --group)
         shift
@@ -153,13 +147,6 @@ while [ ! -z "$1" ]; do
     -l | --login-info)
         shift
         SECRET="$1"
-        ;;
-    -d | --directory)
-        shift
-        OVPN_PATH="$1"
-        ;;
-    -s | --save-configs)
-        SAVE_CONFIGS=true
         ;;
     *)
         echo "Incorrect input provided"
@@ -171,10 +158,10 @@ done
 
 get_recommended
 if [ -z "$RECOMMENDED" ]; then
-    logger -s "Could not get recommended VPN, exiting script"
+    logger -s "($0) Could not get recommended VPN, exiting script"
     exit
 fi
-logger -s "Recommended server URL: $RECOMMENDED. Protocol: $PROTOCOL"
+logger -s "($0) Recommended server URL: $RECOMMENDED. Protocol: $PROTOCOL"
 check_in_configs
 if [ -z "$SERVER_NAME" ]; then
     echo "Server does not exist"
@@ -182,30 +169,30 @@ if [ -z "$SERVER_NAME" ]; then
     #     echo "Downloading configs..."
     #     get_configs
     # fi
-    logger -s "Copying and adding to OpenVPN configs"
+    logger -s "($0) Copying and adding to OpenVPN configs"
     unzip_and_edit_in_place
-    logger -s "Adding new entry to OpenVPN configs"
+    logger -s "($0) Adding new entry to OpenVPN configs"
     create_new_entry
 else
-    logger -s "Server name: $SERVER_NAME"
+    logger -s "($0) Server name: $SERVER_NAME"
 fi
 check_enabled
-logger -s "Currently active server: $ENABLED_SERVER"
+logger -s "($0) Currently active server: $ENABLED_SERVER"
 if [ "$ENABLED_SERVER" == "$SERVER_NAME" ]; then
-    logger -s "Recommended server is already configured as active"
+    logger -s "($0) Recommended server is already configured as active"
     exit
 else
     if [ -z "$NEW_SERVER" ]; then
-        logger -s "Enabling existing entry"
+        logger -s "($0) Enabling existing entry"
         enable_existing_entry $SERVER_NAME
     else
-        logger -s "Enabling new entry"
+        logger -s "($0) Enabling new entry"
         enable_existing_entry $NEW_SERVER
     fi
-    logger -s "Disabling current active server"
+    logger -s "($0) Disabling current active server"
     disable_current_entry $ENABLED_SERVER
 
     uci commit openvpn
 fi
-logger -s "Restarting OpenVPN"
+logger -s "($0) Restarting OpenVPN"
 restart_openvpn

@@ -78,13 +78,11 @@ function get_recommended() {
 
 function check_in_configs() {
     # Config files: uci show openvpn | grep nordvpn | awk -F '=' '/config/{print $2}' | sed "s/'//g"
-    # Config name: uci show openvpn | grep $RECOMMENDED.$PROTOCOL | awk -F '\.' '/config/{print $2}'
-    SERVER_NAME=$(cat /etc/config/openvpn | grep -B 1 $RECOMMENDED.$PROTOCOL | awk '/config openvpn/{print $3}')
+    SERVER_NAME=$(uci show openvpn | grep $RECOMMENDED.$PROTOCOL | awk -F '\.' '/config/{print $2}')
 }
 
 function check_enabled() {
-    # uci show openvpn | grep "enabled='1'" | awk -F '\.' '/.*/{print $2}'
-    ENABLED_SERVER=$(cat /etc/config/openvpn | grep -B 2 "enabled '1'" | awk '/config openvpn/{print $3}')
+    ENABLED_SERVER=$(uci show openvpn | grep "enabled='1'" | awk -F '\.' '/.*/{print $2}')
 }
 
 function unzip_and_edit_in_place() {

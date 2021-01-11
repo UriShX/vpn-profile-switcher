@@ -43,7 +43,8 @@ function check_required() {
 }
 
 function country_city_code() {
-    IDENTIFIER=$(curl --silent "https://raw.githubusercontent.com/urishx/vpn-profile-switcher/db/countries.tsv" | grep -iw "$1" | awk -F '\t' '/[0-9]+/{print $1}')
+    # IDENTIFIER=$(curl --silent "https://raw.githubusercontent.com/urishx/vpn-profile-switcher/db/countries.tsv" | grep -iw "$1" | awk -F '\t' '/[0-9]+/{print $1}')
+    IDENTIFIER=$(wget -q -O - "https://raw.githubusercontent.com/urishx/vpn-profile-switcher/db/countries.tsv" | grep -iw "$1" | awk -F '\t' '/[0-9]+/{print $1}')
 
     if [ -z "$IDENTIFIER" ]; then
         logger -s "The query you entered ("$1") could not be found in the countries databse."
@@ -54,7 +55,8 @@ function country_city_code() {
 }
 
 function server_groups() {
-    IDENTIFIER=$(curl --silent "https://raw.githubusercontent.com/urishx/vpn-profile-switcher/db/server-groups.tsv" | grep -iw "$1" | awk -F '\t' '/.*/{print $2}')
+    # IDENTIFIER=$(curl --silent "https://raw.githubusercontent.com/urishx/vpn-profile-switcher/db/server-groups.tsv" | grep -iw "$1" | awk -F '\t' '/.*/{print $2}')
+    IDENTIFIER=$(wget -q -O - "https://raw.githubusercontent.com/urishx/vpn-profile-switcher/db/server-groups.tsv" | grep -iw "$1" | awk -F '\t' '/.*/{print $2}')
 
     if [ -z "$IDENTIFIER" ]; then
         logger -s "The query you entered ("$1") could not be found in the server groups databse."
@@ -76,7 +78,8 @@ function get_recommended() {
     fi
     URL=${URL}"limit=1"
     logger -s "Fetching VPN recommendations from: $URL"
-    RECOMMENDED=$(curl --silent "$URL" | jsonfilter -e '$[0].hostname')
+    # RECOMMENDED=$(curl --silent "$URL" | jsonfilter -e '$[0].hostname')
+    RECOMMENDED=$(wget -q -O - "$URL" | jsonfilter -e '$[0].hostname')
 }
 
 function get_configs() {

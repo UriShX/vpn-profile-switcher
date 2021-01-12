@@ -102,6 +102,10 @@ function check_enabled() {
 
 function grab_and_edit_config() {
     wget -q https://downloads.nordcdn.com/configs/files/ovpn_$PROTOCOL/servers/$RECOMMENDED.$PROTOCOL.ovpn
+    if [ ! -f "$RECOMMENDED.$PROTOCOL.ovpn" ]; then
+        logger -s "($0) You can view the list of NordVPN server groups online: https://github.com/urishx/vpn-profile-switcher/blob/db/server-groups.tsv"
+        exit 1
+    fi
     mv $RECOMMENDED.$PROTOCOL.ovpn /etc/openvpn/
     sed -i "s/auth-user-pass/auth-user-pass $SECRET/g" /etc/openvpn/$RECOMMENDED.$PROTOCOL.ovpn
 }

@@ -90,7 +90,7 @@ function get_recommended() {
     fi
     URL=${URL}"limit=1"
     logger -s "($0) Fetching VPN recommendations from: $URL"
-    RECOMMENDED=$(wget -q -O - "$URL" | jsonfilter -e '$[0].hostname')
+    RECOMMENDED=$(wget -q -O - "$URL" | jsonfilter -e '$[0].hostname') || true
 }
 
 function check_in_configs() {
@@ -210,6 +210,8 @@ get_recommended
 
 if [ -z "$RECOMMENDED" ]; then
     logger -s "($0) Could not get recommended VPN, exiting script"
+    logger -s "($0) This might be due to a group + country combination, or server group which is not supported by OpenVPN connection."
+    logger -s "($0) Please see NordVPN's server recommendation site, to tune your request: https://nordvpn.com/servers/tools/"
     exit
 fi
 

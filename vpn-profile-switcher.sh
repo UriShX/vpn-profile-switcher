@@ -73,6 +73,7 @@ function server_groups() {
     if [ -z "$IDENTIFIER" ]; then
         logger -s "($0) The query you entered ("$1") could not be found in the server groups databse."
         logger -s "($0) You can view the list of NordVPN server groups online: https://github.com/urishx/vpn-profile-switcher/blob/db/server-groups.tsv"
+        logger -s "($0) Not all server groups are available for OpenVPN connection, please check NordVPN's server recommendation site: https://nordvpn.com/servers/tools/"
         exit 1
     else
         echo "$IDENTIFIER"
@@ -103,7 +104,8 @@ function check_enabled() {
 function grab_and_edit_config() {
     wget -q https://downloads.nordcdn.com/configs/files/ovpn_$PROTOCOL/servers/$RECOMMENDED.$PROTOCOL.ovpn
     if [ ! -f "$RECOMMENDED.$PROTOCOL.ovpn" ]; then
-        logger -s "($0) You can view the list of NordVPN server groups online: https://github.com/urishx/vpn-profile-switcher/blob/db/server-groups.tsv"
+        logger -s "($0) The recommended server profile could not be downloaded from NordVPN's servers, quitting."
+        logger -s "($0) Not all server groups are available for OpenVPN connection, please check NordVPN's server recommendation site: https://nordvpn.com/servers/tools/"
         exit 1
     fi
     mv $RECOMMENDED.$PROTOCOL.ovpn /etc/openvpn/

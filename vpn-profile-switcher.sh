@@ -150,9 +150,15 @@ function remove_unused() {
 
     uci commit
 
-    ENABLED_FILE=$(uci show openvpn.$ENABLED_SERVER.config | awk -F '=' '{print $2}' | sed "s/'//g")
-    EXISTING_FILE=$(uci show openvpn.$SERVER_NAME.config | awk -F '=' '{print $2}' | sed "s/'//g")
-    NEW_FILE=$(uci show openvpn.$NEW_SERVER.config | awk -F '=' '{print $2}' | sed "s/'//g")
+    if [ ! -z "$ENABLED_SERVER" ]; then
+        ENABLED_FILE=$(uci show openvpn.$ENABLED_SERVER.config | awk -F '=' '{print $2}' | sed "s/'//g")
+    fi
+    if [ ! -z "$SERVER_NAME" ]; then
+        EXISTING_FILE=$(uci show openvpn.$SERVER_NAME.config | awk -F '=' '{print $2}' | sed "s/'//g")
+    fi
+    if [ ! -z "$NEW_SERVER" ]; then
+        NEW_FILE=$(uci show openvpn.$NEW_SERVER.config | awk -F '=' '{print $2}' | sed "s/'//g")
+    fi
 
     for X in $NORDVPN_FILES; do
         if [ ! "$X" == "$ENABLED_FILE" ] && [ ! "$X" == "$EXISTING_FILE" ] && [ ! "$X" == "$NEW_FILE" ]; then
@@ -222,8 +228,8 @@ check_in_configs
 if [ -z "$SERVER_NAME" ]; then
     logger -s "($0) Fetching OpenVPN config $RECOMMENDED.$PROTOCOL.ovpn, and setting credentials"
     grab_and_edit_config
-    logger -s "($0) Adding new entry to OpenVPN configs: $NEW_SERVER"
     create_new_entry
+    logger -s "($0) Entered new entry to OpenVPN configs: $NEW_SERVER"
 else
     logger -s "($0) Recommended server name: $SERVER_NAME"
 fi

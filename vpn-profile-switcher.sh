@@ -107,7 +107,7 @@ function grab_and_edit_config() {
 }
 
 function create_new_entry() {
-    NEW_SERVER=$(echo "$RECOMMENDED" | sed 's/\./_/g' | eval sed 's/com/$PROTOCOL/g')
+    NEW_SERVER=$(echo "$RECOMMENDED" | sed 's/[\.\ -]/_/g' | eval sed 's/com/$PROTOCOL/g')
     uci set openvpn.$NEW_SERVER=openvpn
     uci set openvpn.$NEW_SERVER.config="/etc/openvpn/$RECOMMENDED.$PROTOCOL.ovpn"
 }

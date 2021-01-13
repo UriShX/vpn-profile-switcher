@@ -19,13 +19,13 @@ Only the currently used and the previous profiles are kept on the device. _An ad
 
 The [countries](https://github.com/UriShX/vpn-profile-switcher/blob/db/countries.tsv) in which NordVPN operates servers, and the [server groups](https://github.com/UriShX/vpn-profile-switcher/blob/db/server-groups.tsv) are retrieved from this repository, in the [db](https://github.com/UriShX/vpn-profile-switcher/tree/db) branch. \
 The [group-countries.tsv](https://github.com/UriShX/vpn-profile-switcher/blob/db/group-countries.tsv) table displays the possible combinations. \
-The db branch is [updated every 15 minutes](https://github.com/UriShX/vpn-profile-switcher/blob/main/.github/workflows/main.yml) by a [Github action](https://github.com/UriShX/curl-then-jq-shell-action). \*\*It appears that the API lists different servers at different times, so re-check if you couldn't get to the servers you wanted to connect to.
+The db branch is configured to be [updated every 15 minutes](https://github.com/UriShX/vpn-profile-switcher/blob/main/.github/workflows/main.yml) by a [Github action](https://github.com/UriShX/curl-then-jq-shell-action). In practice, the Github scheduling (for free repositories at least) runs the action at best once an hour. Not ideal, but until I figure out a better filtering system that doesn't require installing [JQ](https://stedolan.github.io/jq/) (~93 kB) on the router, scraping NordVPN's API on a remote machine seems like a better approach for the meantime. **Please notice: It appears that the API lists different servers at different times, so re-check if you couldn't get to the servers you wanted to connect to.**
 
 ### About server groups and server group + country combinations
 
 NordVPN does not provide OpenVPN profiles ready to download for all groups, and does not provide every server groups in each country. This means that for some queries to the NordVPN API will return empty, and for others a `.ovpn` configuration file will not be downloaded. In those cases the script should fail gracefully with failure messages printed to system log, as well as to the terminal when running the script from CLI.
 
-The best way to figure out if your parameters will actually work is to check the [group-countries.tsv](https://github.com/UriShX/vpn-profile-switcher/blob/db/group-countries.tsv) table, which is set up to be scraped every 15 minutes. \
+The best way to figure out if your parameters will actually work is to check the [group-countries.tsv](https://github.com/UriShX/vpn-profile-switcher/blob/db/group-countries.tsv) table, which is set up to be scraped every 15 minutes (doesn't really work on schedule, but about once an hour seems good enough). \
 I noticed some recommended server for group and country combinations from [NordVPN server recommendation site](https://nordvpn.com/servers/tools/) did not show up in my scraped tables. Since the script downloads and connections are based on queries to NordVPN's API, and the tables the script queries are also scraped from the same API, I did not try to fix that. \
 Of course, it is also possible to try the group + country combination from the script's CLI.
 
@@ -134,7 +134,9 @@ Has to be followed by filename. \
 Specify file for VPN login credentials. \
 Default is 'secret', as in NordVPN's [guide](https://support.nordvpn.com/Connectivity/Router/1047411192/OpenWRT-CI-setup-with-NordVPN.htm) for setting a connection with OpenWRT over OpenVPN.
 
-### Examples
+## Examples
+
+### From CLI
 
 #### Connect to a recommended Peer to Peer (P2P) server in the United States over UDP (default protocol)
 
@@ -167,13 +169,25 @@ Output:
 # ./vpn-profile-switcher.sh -c israel
 ```
 
-#### Connect to a recommended VPN server in North America (USA and Canada)
+#### Connect to a recommended VPN server in North America (USA and Canada) over UDP (default protocol)
 
 ```root
 # ./vpn-profile-switcher.sh -g the_americas
 ```
 
-#### Set crontab to
+### Scheduling with [crontab](https://openwrt.org/docs/guide-user/base-system/cron)
+
+It is possible to use crontab for maintaining a connection to a recommended server. In this basic example, the script runs once an hour (at a round hour) to get the recommended server in the area the router is connected to, over UDP (default protocol).
+
+```bash
+0 */1 * * * /root/vpn-profile-switcher.sh
+```
+
+The output will be displayed in the system log, like so:
+
+> Using crontab, it is possible to set connection to different countries, groups, and over either UDP or TCP by scheduling running the script with different parameters. Check out both OpenWRT's [crontab](https://openwrt.org/docs/guide-user/base-system/cron) documentation, and [crontab guru](https://crontab.guru/) for more details.
+
+In any case, **_don't forget to run `/etc/init.d/cron restart` to apply changes_**
 
 ## Contributing
 

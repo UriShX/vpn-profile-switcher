@@ -1,19 +1,10 @@
-1	legacy_double_vpn	Double VPN
-3	legacy_onion_over_vpn	Onion Over VPN
-5	legacy_ultra_fast_tv	Ultra fast TV
-7	legacy_anti_ddos	Anti DDoS
-9	legacy_dedicated_ip	Dedicated IP
-11	legacy_standard	Standard VPN servers
-13	legacy_netflix_usa	Netflix USA
+ID	Identifier	Title
+1	legacy_double_vpn	Double_VPN
+3	legacy_onion_over_vpn	Onion_Over_VPN
+9	legacy_dedicated_ip	Dedicated_IP
+11	legacy_standard	Standard_VPN_servers
 15	legacy_p2p	P2P
-17	legacy_obfuscated_servers	Obfuscated Servers
 19	europe	Europe
-21	the_americas	The Americas
-23	asia_pacific	Asia Pacific
-25	africa_the_middle_east_and_india	Africa, the Middle East and India
-233	anycast-dns	Anycast DNS
-236	geo_dns	Geo DNS
-239	grafana	Grafana
-242	kapacitor	Kapacitor
-245	legacy_socks5_proxy	Socks5 Proxy
-248	fastnetmon	FastNetMon
+21	the_americas	The_Americas
+23	asia_pacific	Asia_Pacific
+25	africa_the_middle_east_and_india	Africa__the_Middle_East_and_India

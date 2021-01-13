@@ -1,0 +1,10 @@
+Group Identifier	Countries
+legacy_double_vpn	CA, CH, FR, GB, HK, NL, SE, TW, US
+legacy_onion_over_vpn	NL
+legacy_dedicated_ip	DE, GB, NL, US
+legacy_standard	AT, AU, BA, BE, BG, CA, CH, CY, CZ, DE, DK, ES, FR, GB, GR, HR, HU, IL, IT, JP, LU, LV, MY, NL, NO, PL, RO, SK, UA, US, VN, ZA
+legacy_p2p	AT, AU, BA, BE, BG, CA, CH, CZ, DE, DK, ES, FR, GB, GR, HR, HU, IL, IT, JP, LU, LV, NL, NO, PL, RO, SK, US, ZA
+europe	AT, BA, BE, CH, CY, CZ, DE, DK, FR, GB, HR, HU, NL, NO, PL, SE
+the_americas	CA, US
+asia_pacific	AU, HK, ID, JP, MY, NZ, SG, TW, VN
+africa_the_middle_east_and_india	IL, IN, TR, ZA

@@ -1,4 +1,10 @@
-on: [push]
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    # * is a special character in YAML so you have to quote this string
+    - cron: '*/10 * * * *'
 
 jobs:
   hello_world_job:
@@ -7,12 +13,12 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - id: foo
-        uses: urishx/curl-then-jq-shell-action@v1.1.0
+        uses: urishx/curl-then-jq-shell-action@v1.2.0
         with:
-          who-to-greet: 'Mona the Octocat'
+          who-to-greet: 'UriSh'
       - name: push
         uses: actions-x/commit@v2
         with:
           branch: db
-          files: countries.tsv server-groups.tsv dump.json
+          files: countries.tsv server-groups.tsv group-countries.tsv
           force: true

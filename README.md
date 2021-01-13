@@ -185,7 +185,17 @@ It is possible to use crontab for maintaining a connection to a recommended serv
 
 The output will be displayed in the system log, like so:
 
-> Using crontab, it is possible to set connection to different countries, groups, and over either UDP or TCP by scheduling running the script with different parameters. Check out both OpenWRT's [crontab](https://openwrt.org/docs/guide-user/base-system/cron) documentation, and [crontab guru](https://crontab.guru/) for more details.
+> Wed Jan 13 23:02:00 2021 cron.info crond[22011]: USER root pid 22868 cmd /root/vpn-profile-switcher.sh \
+> Wed Jan 13 23:02:00 2021 user.notice root: (/root/vpn-profile-switcher.sh) Arguments: Protocol: udp; Country: ; NordVPN group: ; User credentials: secret. \
+> Wed Jan 13 23:02:00 2021 user.notice root: (/root/vpn-profile-switcher.sh) Fetching VPN recommendations from: https://api.nordvpn.com/v1/servers/recommendations?filters[servers_technologies][identifier]=openvpn_udp&limit=1 \
+> Wed Jan 13 23:02:10 2021 user.notice root: (/root/vpn-profile-switcher.sh) Recommended server URL: il52.nordvpn.com. \
+> Wed Jan 13 23:02:10 2021 user.notice root: (/root/vpn-profile-switcher.sh) Recommended server name: il52_nordvpn_udp \
+> Wed Jan 13 23:02:10 2021 user.notice root: (/root/vpn-profile-switcher.sh) Currently active server: il38_nordvpn_udp \
+> Wed Jan 13 23:02:10 2021 user.notice root: (/root/vpn-profile-switcher.sh) Enabling existing entry \
+> Wed Jan 13 23:02:10 2021 user.notice root: (/root/vpn-profile-switcher.sh) Disabling current active server \
+> Wed Jan 13 23:02:10 2021 user.notice root: (/root/vpn-profile-switcher.sh) Comitting changes and restarting OpenVPN
+
+Using crontab, it is possible to set connection to different countries, groups, and over either UDP or TCP by scheduling running the script with different parameters. Check out both OpenWRT's [crontab](https://openwrt.org/docs/guide-user/base-system/cron) documentation, and [crontab guru](https://crontab.guru/) for more details.
 
 In any case, **_don't forget to run `/etc/init.d/cron restart` to apply changes_**
 

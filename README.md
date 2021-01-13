@@ -14,36 +14,39 @@ By using crontab, it is also possible to schedule connection to different VPN se
 The script outputs both error messages and normal operation log messages using OpenWRT's [logger](https://openwrt.org/docs/guide-user/base-system/log.essentials), using the `-s` flag. That means log messages are both logged in the system log, as well as seen displayed to the user when running from CLI.
 
 The script scrubs unused profiles by removing them from the OpenWRT OpenVPN configuration and deleting the respective `.ovpn` files. \
+The reason for saving at least the last used profile is that from my experience, sometimes a recommended server is actually too busy to operate reliably. In that case, switching to the last known good profile provides a good alternative, giving the opportunity to request a different server once again. _This should probably be written in a script that'll replace NordVPN's keep-alive script_. \
 Only the currently used and the previous profiles are kept on the device. _An additional option for keeping more profiles on the device is planned, using regular expressions as the option's parameter_.
 
 The [countries](https://github.com/UriShX/vpn-profile-switcher/blob/db/countries.tsv) in which NordVPN operates servers, and the [server groups](https://github.com/UriShX/vpn-profile-switcher/blob/db/server-groups.tsv) are retrieved from this repository, in the [db](https://github.com/UriShX/vpn-profile-switcher/tree/db) branch. \
-The db branch is [updated weekly](https://github.com/UriShX/vpn-profile-switcher/blob/main/.github/workflows/main.yml) by a [Github action](https://github.com/UriShX/curl-then-jq-shell-action).
+The [group-countries.tsv](https://github.com/UriShX/vpn-profile-switcher/blob/db/group-countries.tsv) table displays the possible combinations. \
+The db branch is [updated every 15 minutes](https://github.com/UriShX/vpn-profile-switcher/blob/main/.github/workflows/main.yml) by a [Github action](https://github.com/UriShX/curl-then-jq-shell-action). \*\*It appears that the API lists different servers at different times, so re-check if you couldn't get to the servers you wanted to connect to.
 
 ### About server groups and server group + country combinations
 
 NordVPN does not provide OpenVPN profiles ready to download for all groups, and does not provide every server groups in each country. This means that for some queries to the NordVPN API will return empty, and for others a `.ovpn` configuration file will not be downloaded. In those cases the script should fail gracefully with failure messages printed to system log, as well as to the terminal when running the script from CLI.
 
-The best way to figure out if your parameters will actually work is to either by checking the [NordVPN server recommendation site](https://nordvpn.com/servers/tools/) for group and country combinations, and then checking for available OpenVPN UDP or TCP configuration files for download. \
-Of course, it is also possible to try these from the CLI.
+The best way to figure out if your parameters will actually work is to check the [group-countries.tsv](https://github.com/UriShX/vpn-profile-switcher/blob/db/group-countries.tsv) table, which is set up to be scraped every 15 minutes. \
+I noticed some recommended server for group and country combinations from [NordVPN server recommendation site](https://nordvpn.com/servers/tools/) did not show up in my scraped tables. Since the script downloads and connections are based on queries to NordVPN's API, and the tables the script queries are also scraped from the same API, I did not try to fix that. \
+Of course, it is also possible to try the group + country combination from the script's CLI.
 
-#### Server groups known to work
+#### Server groups known to work, with countries in which there are servers of that group, with OpenVPN profiles
 
-| Title                |                   Remarks                    | Works in the following countries                                                                                               |
-| -------------------- | :------------------------------------------: | :----------------------------------------------------------------------------------------------------------------------------- |
-| Double_VPN           |                      -                       | CA, CH, FR, GB, HK, NL, SE, TW, US                                                                                             |
-| Onion_Over_VPN       | NordVPN site claims 2 servers, API returns 1 | (NL), CH                                                                                                                       |
-| Dedicated_IP         |     Depends on purchase of dedicated IP?     | DE, GB, NL, US                                                                                                                 |
-| Standard_VPN_servers |                      -                       | AT, AU, BA, BE, BG, CA, CH, CY, CZ, DE, DK, ES, FR, GB, GR, HR, HU, IL, IT, JP, LU, LV, MY, NL, NO, PL, RO, SK, UA, US, VN, ZA |
-| P2P                  |                      -                       | AT, AU, BA, BE, BG, CA, CH, CZ, DE, DK, ES, FR, GB, GR, HR, HU, IL, IT, JP, LU, LV, NL, NO, PL, RO, SK, US, ZA                 |
+| Title                |               Remarks                | Works in the following countries                                                                                               |
+| -------------------- | :----------------------------------: | :----------------------------------------------------------------------------------------------------------------------------- |
+| Double_VPN           |                  -                   | CA, CH, FR, GB, HK, NL, SE, TW, US                                                                                             |
+| Onion_Over_VPN       |   Shaky, usually returns only one    | (NL, CH)                                                                                                                       |
+| Dedicated_IP         | Depends on purchase of dedicated IP? | DE, GB, NL, US                                                                                                                 |
+| Standard_VPN_servers |                  -                   | AT, AU, BA, BE, BG, CA, CH, CY, CZ, DE, DK, ES, FR, GB, GR, HR, HU, IL, IT, JP, LU, LV, MY, NL, NO, PL, RO, SK, UA, US, VN, ZA |
+| P2P                  |                  -                   | AT, AU, BA, BE, BG, CA, CH, CZ, DE, DK, ES, FR, GB, GR, HR, HU, IL, IT, JP, LU, LV, NL, NO, PL, RO, SK, US, ZA                 |
 
 #### Regional groups
 
-| Title                            |                      Countries in region                       |
-| -------------------------------- | :------------------------------------------------------------: |
-| Europe                           | AT, BA, BE, CH, CY, CZ, DE, DK, FR, GB, HR, HU, NL, NO, PL, SE |
-| The_Americas                     |                             CA, US                             |
-| Asia_Pacific                     |               AU, HK, ID, JP, MY, NZ, SG, TW, VN               |
-| Africa_the_Middle_East_and_India |                         IL, IN, TR, ZA                         |
+| Title                               |                      Countries in region                       |
+| ----------------------------------- | :------------------------------------------------------------: |
+| Europe                              | AT, BA, BE, CH, CY, CZ, DE, DK, FR, GB, HR, HU, NL, NO, PL, SE |
+| The_Americas                        |                             CA, US                             |
+| Asia_Pacific                        |               AU, HK, ID, JP, MY, NZ, SG, TW, VN               |
+| Africa\_\_the_Middle_East_and_India |                         IL, IN, TR, ZA                         |
 
 ### Special Thanks
 
@@ -141,12 +144,11 @@ Default is 'secret', as in NordVPN's [guide](https://support.nordvpn.com/Connect
 
 Output:
 
-> root@OpenWrt:~# ./vpn-profile-switcher.sh -c US -g p2p \
 > root: (./vpn-profile-switcher.sh) Arguments: Protocol: udp; Country: 228; NordVPN group: legacy_p2p; User credentials: secret. \
-> root: (./vpn-profile-switcher.sh) Fetching VPN recommendations from: https://api.nordvpn.com/v1/servers/recommendations?filters[servers_groups][identifier]=legacy_p2p&filters[country_id]=228&limit=1 \
-> root: (./vpn-profile-switcher.sh) Recommended server URL: us6041.nordvpn.com. \
-> root: (./vpn-profile-switcher.sh) Fetching OpenVPN config us6041.nordvpn.com.udp.ovpn, and setting credentials \
-> root: (./vpn-profile-switcher.sh) Adding new entry to OpenVPN configs: \
+> root: (./vpn-profile-switcher.sh) Fetching VPN recommendations from: https://api.nordvpn.com/v1/servers/recommendations?filters[servers_groups][identifier]=legacy_p2p&filters[country_id]=228&filters[servers_technologies][identifier]=openvpn_udp&limit=1 \
+> root: (./vpn-profile-switcher.sh) Recommended server URL: us6739.nordvpn.com. \
+> root: (./vpn-profile-switcher.sh) Fetching OpenVPN config us6739.nordvpn.com.udp.ovpn, and setting credentials pointing to: secret \
+> root: (./vpn-profile-switcher.sh) Entered new entry to OpenVPN configs: us6739_nordvpn_udp \
 > root: (./vpn-profile-switcher.sh) Currently active server: cy14_nordvpn_udp \
 > root: (./vpn-profile-switcher.sh) Enabling new entry \
 > root: (./vpn-profile-switcher.sh) Disabling current active server \
@@ -164,6 +166,18 @@ Output:
 ```root
 # ./vpn-profile-switcher.sh -c israel
 ```
+
+#### Connect to a recommended VPN server in North America (USA and Canada)
+
+```root
+# ./vpn-profile-switcher.sh -g the_americas
+```
+
+#### Set crontab to
+
+## Contributing
+
+Bug reports and pull requests are welcome on GitHub at https://github.com/UriShX/vpn-profile-switcher.
 
 ## License
 

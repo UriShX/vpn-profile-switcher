@@ -60,7 +60,7 @@ function country_code() {
 
     if [ -z "$IDENTIFIER" ]; then
         logger -s "($0) The query you entered ("$1") could not be found in the countries databse."
-        logger -s "($0) You can view the list of countries in which NordVPN has servers online: https://github.com/urishx/vpn-profile-switcher/blob/db/countries.tsv"
+        logger -s "($0) You can view the list of countries in which NordVPN has OpenVPN servers online: https://github.com/urishx/vpn-profile-switcher/blob/db/countries.tsv"
         exit 1
     else
         echo "$IDENTIFIER"
@@ -72,7 +72,7 @@ function server_groups() {
 
     if [ -z "$IDENTIFIER" ]; then
         logger -s "($0) The query you entered ("$1") could not be found in the server groups databse."
-        logger -s "($0) You can view the list of NordVPN server groups online: https://github.com/urishx/vpn-profile-switcher/blob/db/server-groups.tsv"
+        logger -s "($0) You can view the list of NordVPN OpenVPN server groups online: https://github.com/urishx/vpn-profile-switcher/blob/db/server-groups.tsv"
         logger -s "($0) Not all server groups are available for OpenVPN connection, please check NordVPN's server recommendation site: https://nordvpn.com/servers/tools/"
         exit 1
     else
@@ -88,7 +88,7 @@ function get_recommended() {
     if [ ! -z "$COUNTRY_ID" ]; then
         URL=${URL}"filters[country_id]="${COUNTRY_ID}"&"
     fi
-    URL=${URL}"limit=1"
+    URL=${URL}"filters[servers_technologies][identifier]=openvpn_"${PROTOCOL}"&limit=1"
     logger -s "($0) Fetching VPN recommendations from: $URL"
     RECOMMENDED=$(wget -q -O - "$URL" | jsonfilter -e '$[0].hostname') || true
 }
@@ -105,7 +105,8 @@ function grab_and_edit_config() {
     wget -q https://downloads.nordcdn.com/configs/files/ovpn_$PROTOCOL/servers/$RECOMMENDED.$PROTOCOL.ovpn
     if [ ! -f "$RECOMMENDED.$PROTOCOL.ovpn" ]; then
         logger -s "($0) The recommended server profile could not be downloaded from NordVPN's servers, quitting."
-        logger -s "($0) Not all server groups are available for OpenVPN connection, please check NordVPN's server recommendation site: https://nordvpn.com/servers/tools/"
+        logger -s "($0) Not all server groups are available for OpenVPN connection, please see the list of available group + country combinations at: https://github.com/UriShX/vpn-profile-switcher/blob/db/group-countries.tsv"
+        logger -s "($0) Or check NordVPN's server recommendation site: https://nordvpn.com/servers/tools/"
         exit 1
     fi
     mv $RECOMMENDED.$PROTOCOL.ovpn /etc/openvpn/
@@ -217,7 +218,8 @@ get_recommended
 if [ -z "$RECOMMENDED" ]; then
     logger -s "($0) Could not get recommended VPN, exiting script"
     logger -s "($0) This might be due to a group + country combination, or server group which is not supported by OpenVPN connection."
-    logger -s "($0) Please see NordVPN's server recommendation site, to tune your request: https://nordvpn.com/servers/tools/"
+    logger -s "($0) To tune your request, please see the list of available combinations at: https://github.com/UriShX/vpn-profile-switcher/blob/db/group-countries.tsv"
+    logger -s "($0) Or check NordVPN's server recommendation site: https://nordvpn.com/servers/tools/"
     exit
 fi
 

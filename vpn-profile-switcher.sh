@@ -40,7 +40,7 @@ function check_required() {
     JSONFILTER=$(which jsonfilter)
     LIBUSTREAM=$(opkg info libustream* | awk '/installed/{print $0}')
 
-    if [ ! $WGET ] || [ ! $JSONFILTER ] || [ ! $LIBUSTREAM ]; then
+    if [ ! "$WGET" ] || [ ! "$JSONFILTER" ] || [ ! "$LIBUSTREAM" ]; then
         # wget: SSL support not available, please install one of the libustream-.*[ssl|tls] packages as well as the ca-bundle and ca-certificates packages.
         logger -s "($0) You must have the required packages installed: wget jsonfilter libustream*tls\n"
         exit 1

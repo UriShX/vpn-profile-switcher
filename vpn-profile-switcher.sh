@@ -20,6 +20,7 @@ set -e
 protocol="udp"
 secret="secret"
 recommendations_n=3
+load_distance=10
 
 function show_usage() {
     printf "vpn-profile-switcher.sh v1.0.0\n"
@@ -108,12 +109,40 @@ function check_enabled() {
 
 function test_current_config() {
     if [ $recommendations_n -gt 1 ]; then
+        printf "Recommended servers (" >recs.log
+        printf $(date "+%d.%m.%Y-%H:%M:%S") >>recs.log
+        printf "):\n" >>recs.log
+
+        for x in $(seq $recommendations_n); do
+            printf "$x\t" >>recs.log
+            echo $recommendations | awk -v x=$x '{printf("%s\t"), $x}' >>recs.log
+            echo $loads | awk -v x=$x '{printf("%d\n"), $x}' >>recs.log
+        done
+
         _enabled_config=$(uci show openvpn | grep "$enabled_server.config" | awk -F '=' '{sub (/\/etc\/openvpn\//,""); print $2}' | sed "s/\.$protocol\.ovpn//g" | sed "s/\'//g")
-        if echo "$recommendations" | grep -q $_enabled_config; then
-            logger -s "($0) Enabled config in recommended configs"
+
+        if cat recs.log | grep -q $_enabled_config; then
+            logger -s "($0) Enabled config is in recommended severs list"
+            test_load_distance $_enabled_config
         else
-            logger -s "($0) Could not find the enabled config in recommended servers"
+            logger -s "($0) Could not find the enabled config in recommended servers list"
         fi
+    else
+        logger -s "($0) Configured to recieve only a single recommendation"
+    fi
+}
+
+function test_load_distance() {
+    _comp_load=$(awk -v x=$1 -F '\t' '$2~x {print $3}' <recs.log)
+    _rec_load=$(awk -v x=$recommended -F '\t' '$2~x {print $3}' <recs.log)
+
+    if [ ! -z "$load_distance" ]; then
+        let "_distance=$_comp_load-$_rec_load" || true
+        if [ $_distance -ge $load_distance ]; then
+            echo "load greater then $load_distance"
+        fi
+    else
+        echo "load smaller then load_distance, or no load_distance set"
     fi
 }
 

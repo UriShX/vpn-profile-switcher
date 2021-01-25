@@ -19,6 +19,7 @@ set -e
 
 protocol="udp"
 secret="secret"
+recommendations_n=3
 
 function show_usage() {
     printf "vpn-profile-switcher.sh v1.0.0\n"
@@ -89,9 +90,12 @@ function get_recommended() {
     if [ ! -z "$country_id" ]; then
         _url=${_url}"filters[country_id]="${country_id}"&"
     fi
-    _url=${_url}"filters[servers_technologies][identifier]=openvpn_"${protocol}"&limit=1"
+    _url=${_url}"filters[servers_technologies][identifier]=openvpn_"${protocol}"&limit="${recommendations_n}
     logger -s "($0) Fetching VPN recommendations from: $_url"
-    recommended=$(wget -q -O - "$_url" | jsonfilter -e '$[0].hostname') || true
+    _json=$(wget -q -O - "$_url") || true
+    recommended=$(jsonfilter -s "$_json" -e '$[1].hostname') || true
+    recommendations=$(jsonfilter -s "$_json" -e '$[*].hostname') || true
+    loads=$(jsonfilter -s "$_json" -e '$[*].load') || true
 }
 
 function check_in_configs() {
@@ -100,6 +104,17 @@ function check_in_configs() {
 
 function check_enabled() {
     enabled_server=$(uci show openvpn | grep "enabled='1'" | awk -F '\.' '/.*/{print $2}')
+}
+
+function test_current_config() {
+    if [ $recommendations_n -gt 1 ]; then
+        _enabled_config=$(uci show openvpn | grep "$enabled_server.config" | awk -F '=' '{sub (/\/etc\/openvpn\//,""); print $2}' | sed "s/\.$protocol\.ovpn//g" | sed "s/\'//g")
+        if echo "$recommendations" | grep -q $_enabled_config; then
+            logger -s "($0) Enabled config in recommended configs"
+        else
+            logger -s "($0) Could not find the enabled config in recommended servers"
+        fi
+    fi
 }
 
 function grab_and_edit_config() {
@@ -228,6 +243,12 @@ logger -s "($0) Recommended server URL: $recommended."
 
 check_in_configs
 
+check_enabled
+
+logger -s "($0) Currently active server: $enabled_server"
+
+test_current_config
+
 if [ -z "$server_name" ]; then
     logger -s "($0) Fetching OpenVPN config $recommended.$protocol.ovpn, and setting credentials"
     grab_and_edit_config
@@ -236,10 +257,6 @@ if [ -z "$server_name" ]; then
 else
     logger -s "($0) Recommended server name: $server_name"
 fi
-
-check_enabled
-
-logger -s "($0) Currently active server: $enabled_server"
 
 if [ "$enabled_server" == "$server_name" ]; then
     logger -s "($0) Recommended server is already configured as active"

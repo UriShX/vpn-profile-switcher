@@ -19,8 +19,7 @@ set -e
 
 protocol="udp"
 secret="secret"
-recommendations_n=3
-load_distance=10
+recommendations_n=1
 
 function show_usage() {
     printf "vpn-profile-switcher.sh v1.0.0\n"
@@ -31,6 +30,8 @@ function show_usage() {
     printf "  -p | --protocol < udp | tcp >,\tSelect either UDP or TCP connection. Default is UDP.\n"
     printf "  -c | --country < code | name >,\tSelect Country to filter by. Default is closest to your location.\n"
     printf "  -g | --group < group_name >,\t\tSelect group to filter by.\n"
+    printf "  -r | --recommendations < number >,\tNumber of recommendations to ask from NordVPN API.\n"
+    printf "  -d | --distance < number >,\t\tMinimal load distance between recommended server and current configuration.\n"
     printf "  -l | --login-info < filename >,\tSpecify file for VPN login credentials. Default is 'secret'.\n"
     printf "\nFor more information see README in repo: https://github.com/UriShX/vpn-profile-switcher\n"
 
@@ -45,6 +46,15 @@ function check_required() {
     if [ ! "$WGET" ] || [ ! "$JSONFILTER" ] || [ ! "$LIBUSTREAM" ]; then
         # wget: SSL support not available, please install one of the libustream-.*[ssl|tls] packages as well as the ca-bundle and ca-certificates packages.
         logger -s "($0) You must have the required packages installed: wget jsonfilter libustream*tls\n"
+        exit 1
+    fi
+}
+
+function check_is_num() {
+    if [ -n "$1" -a $1 -eq $1 ] 2>/dev/null; then
+        echo $1
+    else
+        logger -s "($0) Parameter $1 is not a number, quitting"
         exit 1
     fi
 }
@@ -108,24 +118,29 @@ function check_enabled() {
 }
 
 function test_current_config() {
+    _enabled_config=$(uci show openvpn | grep "$enabled_server.config" | awk -F '=' '{sub (/\/etc\/openvpn\//,""); print $2}' | sed "s/\.$protocol\.ovpn//g" | sed "s/\'//g")
+
     if [ $recommendations_n -gt 1 ]; then
-        printf "Recommended servers (" >recs.log
-        printf $(date "+%d.%m.%Y-%H:%M:%S") >>recs.log
-        printf "):\n" >>recs.log
+        if [ "$_enabled_config" != "$recommended" ]; then
+            printf "Recommended servers (" >recommended_servers.log
+            printf $(date "+%d.%m.%Y-%H:%M:%S") >>recommended_servers.log
+            printf "):\n" >>recommended_servers.log
 
-        for x in $(seq $recommendations_n); do
-            printf "$x\t" >>recs.log
-            echo $recommendations | awk -v x=$x '{printf("%s\t"), $x}' >>recs.log
-            echo $loads | awk -v x=$x '{printf("%d\n"), $x}' >>recs.log
-        done
+            for x in $(seq $recommendations_n); do
+                printf "$x\t" >>recommended_servers.log
+                echo $recommendations | awk -v x=$x '{printf("%s\t"), $x}' >>recommended_servers.log
+                echo $loads | awk -v x=$x '{printf("%d\n"), $x}' >>recommended_servers.log
+            done
 
-        _enabled_config=$(uci show openvpn | grep "$enabled_server.config" | awk -F '=' '{sub (/\/etc\/openvpn\//,""); print $2}' | sed "s/\.$protocol\.ovpn//g" | sed "s/\'//g")
-
-        if cat recs.log | grep -q $_enabled_config; then
-            logger -s "($0) Enabled config is in recommended severs list"
-            test_load_distance $_enabled_config
+            if cat recommended_servers.log | grep -q $_enabled_config; then
+                logger -s "($0) Enabled config is in recommended severs list"
+                test_load_distance $_enabled_config
+            else
+                logger -s "($0) Could not find the enabled config in recommended servers list"
+            fi
         else
-            logger -s "($0) Could not find the enabled config in recommended servers list"
+            logger -s "($0) Recommended server is the currently enabled config, quitting"
+            exit 0
         fi
     else
         logger -s "($0) Configured to recieve only a single recommendation"
@@ -133,16 +148,19 @@ function test_current_config() {
 }
 
 function test_load_distance() {
-    _comp_load=$(awk -v x=$1 -F '\t' '$2~x {print $3}' <recs.log)
-    _rec_load=$(awk -v x=$recommended -F '\t' '$2~x {print $3}' <recs.log)
+    _comp_load=$(awk -v x=$1 -F '\t' '$2~x {print $3}' <recommended_servers.log)
+    _rec_load=$(awk -v x=$recommended -F '\t' '$2~x {print $3}' <recommended_servers.log)
 
     if [ ! -z "$load_distance" ]; then
         let "_distance=$_comp_load-$_rec_load" || true
-        if [ $_distance -ge $load_distance ]; then
-            echo "load greater then $load_distance"
+        if [ $_distance -gt $load_distance ]; then
+            logger -s "($0) Load on enabled server is more then $load_distance over recommended server, switching"
+        else
+            logger -s "($0) Load difference between enabled and recommended servers is smaller then $load_distance, quitting without change"
+            exit 0
         fi
     else
-        echo "load smaller then load_distance, or no load_distance set"
+        logger -s "($0) load_distance is not set"
     fi
 }
 
@@ -243,6 +261,14 @@ while [ ! -z "$1" ]; do
     -g | --group)
         shift
         group_identifier=$(server_groups $1)
+        ;;
+    -r | --recommendations)
+        shift
+        recommendations_n=$(check_is_num $1)
+        ;;
+    -d | --distance)
+        shift
+        load_distance=$(check_is_num $1)
         ;;
     -l | --login-info)
         shift

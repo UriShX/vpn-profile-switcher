@@ -118,10 +118,10 @@ function check_enabled() {
 }
 
 function test_current_config() {
-    _enabled_config=$(uci show openvpn | grep "$enabled_server.config" | awk -F '=' '{sub (/\/etc\/openvpn\//,""); print $2}' | sed "s/\.$protocol\.ovpn//g" | sed "s/\'//g")
+    _enabled_config=$(uci show openvpn | grep "$enabled_server.config" | awk -F\' '{sub (/\/etc\/openvpn\//,""); print $2}')
 
     if [ $recommendations_n -gt 1 ]; then
-        if [ "$_enabled_config" != "$recommended" ]; then
+        if [ "$_enabled_config" != "$recommended.$protocol.ovpn" ]; then
             printf "Recommended servers (" >recommended_servers.log
             printf $(date "+%d.%m.%Y-%H:%M:%S") >>recommended_servers.log
             printf "):\n" >>recommended_servers.log
@@ -177,7 +177,7 @@ function grab_and_edit_config() {
 }
 
 function create_new_entry() {
-    new_server=$(echo "$recommended" | sed 's/[\.\ -]/_/g' | eval sed 's/com/$protocol/g')
+    new_server=$(echo "$recommended" | sed 's/[\.\ -]/_/g' | sed "s/com/$protocol/g")
     uci set openvpn.$new_server=openvpn
     uci set openvpn.$new_server.config="/etc/openvpn/$recommended.$protocol.ovpn"
 }
@@ -193,7 +193,7 @@ function disable_current_entry() {
 function list_ovpn_configs() {
     uci show openvpn | grep nordvpn | while read y; do
         if [ "$1" == 'files' ]; then
-            echo $(awk -F '=' '/config/{print $2}' | sed "s/'//g")
+            echo $(awk -F\' '/config/{print $2}')
         elif [ "$1" == 'names' ]; then
             echo $(awk -F '.' '/config/{print $2}')
         else
@@ -215,17 +215,17 @@ function remove_unused() {
     uci commit
 
     if [ ! -z "$enabled_server" ]; then
-        enabled_file=$(uci show openvpn.$enabled_server.config | awk -F '=' '{print $2}' | sed "s/'//g")
+        _enabled_config="/etc/openvpn/"${_enabled_config}
     fi
     if [ ! -z "$server_name" ]; then
-        existing_file=$(uci show openvpn.$server_name.config | awk -F '=' '{print $2}' | sed "s/'//g")
+        existing_file=$(uci show openvpn.$server_name.config | awk -F\' '{print $2}')
     fi
     if [ ! -z "$new_server" ]; then
-        new_file=$(uci show openvpn.$new_server.config | awk -F '=' '{print $2}' | sed "s/'//g")
+        new_file=$(uci show openvpn.$new_server.config | awk -F\' '{print $2}')
     fi
 
     for X in $nordvpn_files; do
-        if [ ! "$X" == "$enabled_file" ] && [ ! "$X" == "$existing_file" ] && [ ! "$X" == "$new_file" ]; then
+        if [ ! "$X" == "$_enabled_config" ] && [ ! "$X" == "$existing_file" ] && [ ! "$X" == "$new_file" ]; then
             rm $X
         fi
     done

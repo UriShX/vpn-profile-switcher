@@ -104,7 +104,7 @@ function get_recommended() {
     _url=${_url}"filters[servers_technologies][identifier]=openvpn_"${protocol}"&limit="${recommendations_n}
     logger -s "($0) Fetching VPN recommendations from: $_url"
     _json=$(wget -q -O - "$_url") || true
-    recommended=$(jsonfilter -s "$_json" -e '$[1].hostname') || true
+    recommended=$(jsonfilter -s "$_json" -e '$[0].hostname') || true
     recommendations=$(jsonfilter -s "$_json" -e '$[*].hostname') || true
     loads=$(jsonfilter -s "$_json" -e '$[*].load') || true
 }

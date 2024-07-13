@@ -13,19 +13,22 @@ on:
     #        │ │ │ │ │
     #        * * * * *
     - cron: '*/15 * * * *'
+  workflow_dispatch:
 
 jobs:
   hello_world_job:
     runs-on: ubuntu-latest
     name: Scrape NordVPN's OpenVPN availability from API
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+      # https://github.com/actions/checkout
       - id: foo
         uses: urishx/curl-then-jq-shell-action@v1.2.1
         with:
           who-to-greet: 'UriSh'
       - name: push
-        uses: actions-x/commit@v2
+        uses: actions-x/commit@v6
+        # https://github.com/actions-x/commit
         with:
           branch: db
           files: countries.tsv server-groups.tsv group-countries.tsv

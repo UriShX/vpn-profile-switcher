@@ -2,18 +2,19 @@
 
 wg_iface="nordlynx"
 vpn_type="wireguard"
+_create=0
 
 function show_usage() {
     printf "get_nordvpn_credentials.sh v1.0.0\n"
     printf "Get NordVPN credentials and save OpenVPN 'secret' file or set a WireGuard interface with it.\n\n"
     printf "Usage: $0 [options <parameters>] (access_token)\n\n"
     printf "Options: \n"
-    printf "  -h | --help,\t\t\t\t\tPrint this help message\n"
-    printf "  -v | --vpn_type < openvpn | wireguard >,\t\tSelect either OpenVPN or WireGuard. Default is wireguard.\n" 
+    printf "  -h | --help,\t\t\t\t\t\tPrint this help message\n"
+    printf "  -v | --vpn_type < openvpn | wireguard >, \t\tSelect either OpenVPN or WireGuard. Default is wireguard.\n" 
     printf "  -t | --token < path/to/nordvpn_access_token >,\tPath to the file containing the NordVPN access token.\n"
     printf "  -w | --wireguard_interface < interface_name >,\tName of the WireGuard interface. Default is 'nordlynx'.\n"
     printf "  -c | --create,\t\t\t\t\tCreate a new WireGuard interface with the provided name OR the OpenVPN 'secret' file.\n"
-    printf " access_token,\t\t\t\t\tThe NordVPN access token. This is not required if the -t option is used.\n"
+    printf "  access_token,\t\t\t\t\tThe NordVPN access token. This is not required if the -t option is used.\n"
     printf "\nIf no options are provided, the script will assume the access token is the first argument.\n"
     printf "\nExample: $0 -t /etc/nordvpn_access_token -v openvpn\n"
     printf "\nFor more information see README in repo: https://github.com/UriShX/vpn-profile-switcher\n"
@@ -61,6 +62,14 @@ function test_and_set_wg_interface() {
         wg_iface=$1
     fi
 
+    # check if the provided interface name is already in use
+    uci show network.$wg_iface | grep -q .
+    if [ $? == 0 ]; then
+        logger -s "($0) Interface name $wg_iface is already in use."
+        unset_variables
+        exit 1
+    fi
+    
     echo $wg_iface
 }
 
@@ -95,7 +104,7 @@ function save_credentials() {
     if [ $vpn_type == "openvpn" ]; then
         _username=$(jsonfilter -s "$response_json" -e '@.username')
         _password=$(jsonfilter -s "$response_json" -e '@.password')
-        if [ ! _create == 1 ]; then
+        if [ $_create -ne 1 ]; then
             echo "Username: $_username"
             echo "Password: $_password"
             logger -s "($0) OpenVPN credentials echoed to stdout."
@@ -106,7 +115,7 @@ function save_credentials() {
         fi
     else
         _key=$(jsonfilter -s "$response_json" -e "@.nordlynx_private_key")
-        if [ ! _create == 1 ]; then
+        if [ $_create -ne 1 ]; then
             echo "Nordlynx private key: $_key"
             echo "Please set the port to 51820 and the addresses to 10.5.0.2/32 in the WireGuard interface configuration."
             logger -s "($0) WireGuard private key echoed to stdout."
@@ -174,14 +183,6 @@ while [ ! -z "$1" ]; do
     esac
     shift
 done
-
-# check if the provided interface name is already in use
-uci show network.$wg_iface | grep -q .
-if [ $? == 0 ]; then
-    logger -s "($0) Interface name $wg_iface is already in use."
-    unset_variables
-    exit 1
-fi
 
 get_credendtials
 

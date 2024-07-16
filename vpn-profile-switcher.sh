@@ -19,20 +19,27 @@ set -e
 
 protocol="udp"
 secret="secret"
+vpn_type="openvpn"
+wg_iface="nordlynx"
 recommendations_n=1
 
 function show_usage() {
-    printf "vpn-profile-switcher.sh v1.0.0\n"
-    printf "Get NordVPN recommended profile and set OpenVPN on OpenWRT to use said profile.\n\n"
+    printf "vpn-profile-switcher.sh v1.1.0\n"
+    printf "Get NordVPN recommended profile and set OpenVPN or WireGuard on OpenWRT to use said profile.\n\n"
     printf "Usage: $0 [options <parameters>]\n\n"
     printf "Options: \n"
     printf "  -h | --help,\t\t\t\tPrint this help message\n"
-    printf "  -p | --protocol < udp | tcp >,\tSelect either UDP or TCP connection. Default is UDP.\n"
+    printf "  -t | --type < openvpn | wireguard >,\t\tSelect either OpenVPN or WireGuard. Default is OpenVPN.\n" 
+    printf "  -p | --protocol < udp | tcp >,\tSelect either UDP or TCP connection. Default is UDP, and it is the only choice for WireGuard.\n"
     printf "  -c | --country < code | name >,\tSelect Country to filter by. Default is closest to your location.\n"
     printf "  -g | --group < group_name >,\t\tSelect group to filter by.\n"
     printf "  -r | --recommendations < number >,\tNumber of recommendations to ask from NordVPN API.\n"
     printf "  -d | --distance < number >,\t\tMinimal load distance between recommended server and current configuration.\n"
-    printf "  -l | --login-info < filename >,\tSpecify file for VPN login credentials. Default is 'secret'.\n"
+    printf "  -l | --login-info < filename >,\tSpecify file for VPN login credentials. Default is 'secret'. Applicable only for OpenVPN.\n"
+    printf "  -i | --interface < interface >,\tSpecify interface to use for WireGuard. Default is 'nordlynx'. Applicable only for WireGuard.\n"
+    printf "\nExamples:\n"
+    printf "  $0 -t openvpn -p udp -c us -r 3 -d 10 -l secret\n"
+    printf "  $0 -t wireguard -p udp -c us -r 3 -d 10 -i nordlynx\n"
     printf "\nFor more information see README in repo: https://github.com/UriShX/vpn-profile-switcher\n"
 
     exit
@@ -62,6 +69,15 @@ function check_is_num() {
 function verify_protocol() {
     if [ ! "$1" == "tcp" ] && [ ! "$1" == "udp" ]; then
         logger -s "($0) Protocol must be either udp or tcp, your input was: $1."
+        exit 1
+    else
+        echo $1
+    fi
+}
+
+function verify_vpn_type() {
+    if [ ! "$1" == "openvpn" ] && [ ! "$1" == "wireguard" ]; then
+        logger -s "($0) VPN type must be either openvpn or wireguard, your input was: $1."
         exit 1
     else
         echo $1
@@ -101,16 +117,24 @@ function get_recommended() {
     if [ ! -z "$country_id" ]; then
         _url=${_url}"filters[country_id]="${country_id}"&"
     fi
-    _url=${_url}"filters[servers_technologies][identifier]=openvpn_"${protocol}"&limit="${recommendations_n}
+    _url=${_url}"filters[servers_technologies][identifier]="${vpn_type}"_"${protocol}"&limit="${recommendations_n}
     logger -s "($0) Fetching VPN recommendations from: $_url"
     _json=$(wget -q -O - "$_url") || true
+    echo $_json
     recommended=$(jsonfilter -s "$_json" -e '$[0].hostname') || true
     recommendations=$(jsonfilter -s "$_json" -e '$[*].hostname') || true
     loads=$(jsonfilter -s "$_json" -e '$[*].load') || true
+    if [ "$vpn_type" == "wireguard" ]; then
+        public_key=$(jsonfilter -s "$_json" -e '$[0].technologies[*].metadata[*].value') || true
+    fi
 }
 
 function check_in_configs() {
-    server_name=$(uci show openvpn | grep $recommended.$protocol | awk -F '\.' '/config/{print $2}')
+    if [ "$vpn_type" == "openvpn" ]; then
+        server_name=$(uci show openvpn | grep $recommended.$protocol | awk -F '\.' '/config/{print $2}')
+    elif [ "$vpn_type" == "wireguard" ]; then
+        server_name=$(uci show network | grep $wg_iface | awk -F '\.' '/config/{print $2}')
+    fi
 }
 
 function check_enabled() {
@@ -236,6 +260,25 @@ function restart_openvpn() {
     /etc/init.d/openvpn restart
 }
 
+function restart_wireguard() {
+    uci commit network
+    /etc/init.d/network restart
+}
+
+function unset_variables() {
+    unset vpn_type
+    unset protocol
+    unset country_id
+    unset group_identifier
+    unset secret
+    unset recommended
+    unset recommendations_n
+    unset load_distance
+    unset server_name
+    unset new_server
+    unset enabled_server
+}
+
 ### RUN ###
 # if [[ $# -gt 3 ]] || [[ $# -eq 0 ]]; then
 #     echo "Either 0 or more than 3 input arguments provided which is not supported"
@@ -249,6 +292,10 @@ while [ ! -z "$1" ]; do
     case "$1" in
     -h | --help)
         show_usage
+        ;;
+    -t | --type)
+        shift
+        vpn_type=$(verify_vpn_type $1)
         ;;
     -p | --protocol)
         shift
@@ -282,7 +329,7 @@ while [ ! -z "$1" ]; do
     shift
 done
 
-logger -s "($0) Arguments: Protocol: $protocol; Country: $country_id; NordVPN group: $group_identifier; User credentials: $secret."
+logger -s "($0) Arguments: VPN type: $vpn_type; Protocol: $protocol; Country: $country_id; NordVPN group: $group_identifier; User credentials: $secret."
 
 get_recommended
 
@@ -296,41 +343,42 @@ fi
 
 logger -s "($0) Recommended server URL: $recommended."
 
-check_in_configs
+# check_in_configs
 
-check_enabled
+# check_enabled
 
-logger -s "($0) Currently active server: $enabled_server"
+# logger -s "($0) Currently active server: $enabled_server"
 
-test_current_config
+# test_current_config
 
-if [ -z "$server_name" ]; then
-    logger -s "($0) Fetching OpenVPN config $recommended.$protocol.ovpn, and setting credentials"
-    grab_and_edit_config
-    create_new_entry
-    logger -s "($0) Entered new entry to OpenVPN configs: $new_server"
-else
-    logger -s "($0) Recommended server name: $server_name"
-fi
+# if [ -z "$server_name" ]; then
+#     logger -s "($0) Fetching OpenVPN config $recommended.$protocol.ovpn, and setting credentials"
+#     grab_and_edit_config
+#     create_new_entry
+#     logger -s "($0) Entered new entry to OpenVPN configs: $new_server"
+# else
+#     logger -s "($0) Recommended server name: $server_name"
+# fi
 
-if [ "$enabled_server" == "$server_name" ]; then
-    logger -s "($0) Recommended server is already configured as active"
-    exit
-else
-    if [ -z "$new_server" ]; then
-        logger -s "($0) Enabling existing entry"
-        enable_existing_entry $server_name
-    else
-        logger -s "($0) Enabling new entry"
-        enable_existing_entry $new_server
-    fi
-    logger -s "($0) Disabling current active server"
-    disable_current_entry $enabled_server
-fi
+# if [ "$enabled_server" == "$server_name" ]; then
+#     logger -s "($0) Recommended server is already configured as active"
+#     exit
+# else
+#     if [ -z "$new_server" ]; then
+#         logger -s "($0) Enabling existing entry"
+#         enable_existing_entry $server_name
+#     else
+#         logger -s "($0) Enabling new entry"
+#         enable_existing_entry $new_server
+#     fi
+#     logger -s "($0) Disabling current active server"
+#     disable_current_entry $enabled_server
+# fi
 
-logger -s "($0) Comitting changes and restarting OpenVPN"
+# logger -s "($0) Comitting changes and restarting OpenVPN"
 
-restart_openvpn
+# restart_openvpn
 
-logger -s "($0) Removing unused NordVPN profiles, leaving current and last used."
-remove_unused
+# logger -s "($0) Removing unused NordVPN profiles, leaving current and last used."
+# remove_unused
+

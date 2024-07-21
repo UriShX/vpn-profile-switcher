@@ -29,13 +29,13 @@ function show_usage() {
     printf "Usage: $0 [options <parameters>]\n\n"
     printf "Options: \n"
     printf "  -h | --help,\t\t\t\tPrint this help message\n"
-    printf "  -t | --type < openvpn | wireguard >,\t\tSelect either OpenVPN or WireGuard. Default is OpenVPN.\n" 
+    printf "  -t | --type < openvpn | wireguard >,\tSelect either OpenVPN or WireGuard. Default is OpenVPN.\n" 
     printf "  -p | --protocol < udp | tcp >,\tSelect either UDP or TCP connection. Default is UDP, and it is the only choice for WireGuard.\n"
     printf "  -c | --country < code | name >,\tSelect Country to filter by. Default is closest to your location.\n"
     printf "  -g | --group < group_name >,\t\tSelect group to filter by.\n"
     printf "  -r | --recommendations < number >,\tNumber of recommendations to ask from NordVPN API.\n"
     printf "  -d | --distance < number >,\t\tMinimal load distance between recommended server and current configuration.\n"
-    printf "  -l | --login-info < filename >,\tSpecify file for VPN login credentials. Default is 'secret'. Applicable only for OpenVPN.\n"
+    printf "  -l | --login-info < filename >,\tSpecify file for VPN login credentials. Default is 'secret' (stored in /etc/openvpn/). Applicable only for OpenVPN.\n"
     printf "  -i | --interface < interface >,\tSpecify interface to use for WireGuard. Default is 'nordlynx'. Applicable only for WireGuard.\n"
     printf "\nExamples:\n"
     printf "  $0 -t openvpn -p udp -c us -r 3 -d 10 -l secret\n"
@@ -133,14 +133,27 @@ function check_in_configs() {
     if [ "$vpn_type" == "openvpn" ]; then
         server_name=$(uci show openvpn | grep $recommended.$protocol | awk -F '\.' '/config/{print $2}')
     elif [ "$vpn_type" == "wireguard" ]; then
-        server_name=$(uci show network | grep $wg_iface | awk -F '\.' '/config/{print $2}')
+        # server_name=$(uci show network | grep $wg_iface | awk -F '\.' '/config/{print $2}')
+        server_name=$(uci show network | grep "${wg_iface}.*endpoint_host" | sed -E 's/.*_([0-9]+).*='\''(.*)'\''$/Peer \1: \2/')
     fi
 }
 
 function check_enabled() {
-    enabled_server=$(uci show openvpn | grep "enabled='1'" | awk -F '\.' '/.*/{print $2}')
+    if [ "$vpn_type" == "openvpn" ]; then
+        enabled_server=$(uci show openvpn | grep "enabled='1'" | awk -F '\.' '/.*/{print $2}')
+    elif [ "$vpn_type" == "wireguard" ]; then
+        enabled_server=$(uci show network | grep "${wg_iface}.*disabled='0'" | sed -E 's/.*_([a-z]{0,2}[0-9]{1,3}).*='\''.*'\''$/\1/')
+        enabled_server=$(uci show network | grep "${wg_iface}_peer_${enabled_server}.endpoint_host" | sed -E 's/.*_[a-z]{0,2}[0-9]{1,3}.*='\''(.*)'\''$/\1/')
+    fi
 }
 
+
+# Function to test the current configuration
+# This function checks if the currently enabled OpenVPN configuration matches the recommended server configuration.
+# If there are multiple recommended servers, it logs the recommendations along with their loads.
+# If the enabled configuration is found in the recommended servers list, it calls the test_load_distance function.
+# If the enabled configuration is the recommended server, it logs a message and exits.
+# If only a single recommendation is configured, it logs a message.
 function test_current_config() {
     _enabled_config=$(uci show openvpn | grep "$enabled_server.config" | awk -F\' '{sub (/\/etc\/openvpn\//,""); print $2}')
 
@@ -157,7 +170,7 @@ function test_current_config() {
             done
 
             if cat recommended_servers.log | grep -q $_enabled_config; then
-                logger -s "($0) Enabled config is in recommended severs list"
+                logger -s "($0) Enabled config is in recommended servers list"
                 test_load_distance $_enabled_config
             else
                 logger -s "($0) Could not find the enabled config in recommended servers list"
@@ -167,7 +180,7 @@ function test_current_config() {
             exit 0
         fi
     else
-        logger -s "($0) Configured to recieve only a single recommendation"
+        logger -s "($0) Configured to receive only a single recommendation"
     fi
 }
 
@@ -201,17 +214,39 @@ function grab_and_edit_config() {
 }
 
 function create_new_entry() {
-    new_server=$(echo "$recommended" | sed 's/[\.\ -]/_/g' | sed "s/com/$protocol/g")
-    uci set openvpn.$new_server=openvpn
-    uci set openvpn.$new_server.config="/etc/openvpn/$recommended.$protocol.ovpn"
+    if [ "$vpn_type" == "openvpn" ]; then
+        new_server=$(echo "$recommended" | sed 's/[\.\ -]/_/g' | sed "s/com/$protocol/g")
+        uci set openvpn.$new_server=openvpn
+        uci set openvpn.$new_server.config="/etc/openvpn/$recommended.$protocol.ovpn"
+    elif [ "$vpn_type" == "wireguard" ]; then
+        new_server=$(echo "$recommended" | sed -E 's/([a-z]{2}[0-9]{1,3}).*''$/\1/')
+        uci set network.${wg_iface}_peer_${new_server}="wireguard_$wg_iface"
+        uci set network.${wg_iface}_peer_${new_server}.public_key="$public_key"
+        uci set network.${wg_iface}_peer_${new_server}.endpoint_host="$recommended"
+        uci set network.${wg_iface}_peer_${new_server}.endpoint_port="51820"
+        uci set network.${wg_iface}_peer_${new_server}.persistent_keepalive="25"
+        uci set network.${wg_iface}_peer_${new_server}.route_allowed_ips="1"
+        uci add_list network.${wg_iface}_peer_${new_server}.allowed_ips="0.0.0.0/0"
+        uci add_list network.${wg_iface}_peer_${new_server}.allowed_ips="::/0"
+        uci set network.${wg_iface}_peer_${new_server}.description="$recommended"
+    fi
 }
 
 function enable_existing_entry() {
-    eval uci set openvpn.$1.enabled='1'
+    if [ "$vpn_type" == "openvpn" ]; then
+        eval uci set openvpn.$1.enabled='1'
+    elif [ "$vpn_type" == "wireguard" ]; then
+        eval uci set network.${wg_iface}_peer_${1}.disabled='0'
+    fi
 }
 
 function disable_current_entry() {
-    eval uci del openvpn.$1.enabled
+    if [ "$vpn_type" == "openvpn" ]; then
+        # eval uci set openvpn.$1.enabled='0'
+        eval uci del openvpn.$1.enabled
+    elif [ "$vpn_type" == "wireguard" ]; then
+        eval uci set network.${wg_iface}_peer_${1}.disabled='1'
+    fi
 }
 
 function list_ovpn_configs() {
@@ -227,32 +262,41 @@ function list_ovpn_configs() {
 }
 
 function remove_unused() {
-    nordvpn_configs=$(list_ovpn_configs names)
-    nordvpn_files=$(list_ovpn_configs files)
+    if [ "$vpn_type" == "openvpn" ]; then
+        nordvpn_configs=$(list_ovpn_configs names)
+        nordvpn_files=$(list_ovpn_configs files)
 
-    for X in $nordvpn_configs; do
-        if [ ! "$X" == "$server_name" ] && [ ! "$X" == "$new_server" ] && [ ! "$X" == "$enabled_server" ]; then
-            uci del openvpn.$X
+        for X in $nordvpn_configs; do
+            if [ ! "$X" == "$server_name" ] && [ ! "$X" == "$new_server" ] && [ ! "$X" == "$enabled_server" ]; then
+                uci del openvpn.$X
+            fi
+        done
+
+        uci commit
+
+        if [ ! -z "$enabled_server" ]; then
+            _enabled_config="/etc/openvpn/"${_enabled_config}
         fi
-    done
-
-    uci commit
-
-    if [ ! -z "$enabled_server" ]; then
-        _enabled_config="/etc/openvpn/"${_enabled_config}
-    fi
-    if [ ! -z "$server_name" ]; then
-        existing_file=$(uci show openvpn.$server_name.config | awk -F\' '{print $2}')
-    fi
-    if [ ! -z "$new_server" ]; then
-        new_file=$(uci show openvpn.$new_server.config | awk -F\' '{print $2}')
-    fi
-
-    for X in $nordvpn_files; do
-        if [ ! "$X" == "$_enabled_config" ] && [ ! "$X" == "$existing_file" ] && [ ! "$X" == "$new_file" ]; then
-            rm $X
+        if [ ! -z "$server_name" ]; then
+            existing_file=$(uci show openvpn.$server_name.config | awk -F\' '{print $2}')
         fi
-    done
+        if [ ! -z "$new_server" ]; then
+            new_file=$(uci show openvpn.$new_server.config | awk -F\' '{print $2}')
+        fi
+
+        for X in $nordvpn_files; do
+            if [ ! "$X" == "$_enabled_config" ] && [ ! "$X" == "$existing_file" ] && [ ! "$X" == "$new_file" ]; then
+                rm $X
+            fi
+        done
+    elif [ "$vpn_type" == "wireguard" ]; then
+        nordvpn_configs=$(uci show network | grep "${wg_iface}_peer_" | sed -E 's/.*_([a-z]{0,2}[0-9]{1,3}).*='\''.*'\''$/\1/')
+        for X in $nordvpn_configs; do
+            if [ ! "$X" == "$enabled_server" ] && [ ! "$X" == "$server_name" ] && [ ! "$X" == "$new_server" ]; then
+                uci del network.${wg_iface}_peer_$X
+            fi
+        done
+    fi
 }
 
 function restart_openvpn() {
@@ -277,6 +321,11 @@ function unset_variables() {
     unset server_name
     unset new_server
     unset enabled_server
+    unset _enabled_config
+    unset existing_file
+    unset new_file
+    unset nordvpn_configs
+    unset nordvpn_files
 }
 
 ### RUN ###
@@ -343,11 +392,11 @@ fi
 
 logger -s "($0) Recommended server URL: $recommended."
 
-# check_in_configs
+check_in_configs
 
-# check_enabled
+check_enabled
 
-# logger -s "($0) Currently active server: $enabled_server"
+logger -s "($0) Currently active $vpn_type server: $enabled_server"
 
 # test_current_config
 
@@ -375,10 +424,13 @@ logger -s "($0) Recommended server URL: $recommended."
 #     disable_current_entry $enabled_server
 # fi
 
-# logger -s "($0) Comitting changes and restarting OpenVPN"
+# logger -s "($0) Comitting changes and restarting ${vpn_type}"
 
-# restart_openvpn
+# if [ "$vpn_type" == "openvpn" ]; then
+#   restart_openvpn
+# elif [ "$vpn_type" == "wireguard" ]; then
+#   restart_wireguard
+# fi
 
 # logger -s "($0) Removing unused NordVPN profiles, leaving current and last used."
 # remove_unused
-

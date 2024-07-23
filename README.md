@@ -58,7 +58,7 @@ Of course, it is also possible to try the group + country combination from the s
 
 #### Special Thanks
 
-Writing this script would not have been possible without the exquisite [NordVPN API documentation](https://blog.sleeplessbeastie.eu/2019/02/18/how-to-use-public-nordvpn-api/) by Milosz Galazka.
+Writing this script would not have been possible without the exquisite ~~[NordVPN API documentation](https://blog.sleeplessbeastie.eu/2019/02/18/how-to-use-public-nordvpn-api/)~~ [NordVPN API documentation on wayback machine](https://web.archive.org/web/20220914181232/https://sleeplessbeastie.eu/2019/02/18/how-to-use-public-nordvpn-api/) by Milosz Galazka.
 
 ### `get_nordpn_credentials.sh`
 

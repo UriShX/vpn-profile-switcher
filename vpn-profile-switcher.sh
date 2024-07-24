@@ -21,22 +21,24 @@ protocol="udp"
 secret="secret"
 vpn_type="openvpn"
 wg_iface="nordlynx"
+db_location="github"
 recommendations_n=1
 
 function show_usage() {
-    printf "vpn-profile-switcher.sh v1.1.0\n"
+    printf "vpn-profile-switcher.sh v1.1.1\n"
     printf "Get NordVPN recommended profile and set OpenVPN or WireGuard on OpenWRT to use said profile.\n\n"
     printf "Usage: $0 [options <parameters>]\n\n"
     printf "Options: \n"
-    printf "  -h | --help,\t\t\t\tPrint this help message\n"
-    printf "  -t | --type < openvpn | wireguard >,\tSelect either OpenVPN or WireGuard. Default is OpenVPN.\n" 
-    printf "  -p | --protocol < udp | tcp >,\tSelect either UDP or TCP connection. Default is UDP, and it is the only choice for WireGuard.\n"
-    printf "  -c | --country < code | name >,\tSelect Country to filter by. Default is closest to your location.\n"
-    printf "  -g | --group < group_name >,\t\tSelect group to filter by.\n"
-    printf "  -r | --recommendations < number >,\tNumber of recommendations to ask from NordVPN API.\n"
-    printf "  -d | --distance < number >,\t\tMinimal load distance between recommended server and current configuration.\n"
-    printf "  -l | --login-info < filename >,\tSpecify file for VPN login credentials. Default is 'secret' (stored in /etc/openvpn/). Applicable only for OpenVPN.\n"
-    printf "  -i | --interface < interface >,\tSpecify interface to use for WireGuard. Default is 'nordlynx'. Applicable only for WireGuard.\n"
+    printf "  -h | --help,\t\t\t\t\tPrint this help message\n"
+    printf "  -t | --type < openvpn | wireguard >,\t\tSelect either OpenVPN or WireGuard. Default is OpenVPN.\n" 
+    printf "  -p | --protocol < udp | tcp >,\t\tSelect either UDP or TCP connection. Default is UDP, and it is the only choice for WireGuard.\n"
+    printf "  -c | --country < code | name >,\t\tSelect Country to filter by. Default is closest to your location.\n"
+    printf "  -g | --group < group_name >,\t\t\tSelect group to filter by.\n"
+    printf "  -r | --recommendations < number >,\t\tNumber of recommendations to ask from NordVPN API.\n"
+    printf "  -d | --distance < number >,\t\t\tMinimal load distance between recommended server and current configuration.\n"
+    printf "  -l | --login-info < filename >,\t\tSpecify file for VPN login credentials. Default is 'secret' (stored in /etc/openvpn/). Applicable only for OpenVPN.\n"
+    printf "  -i | --interface < interface >,\t\tSpecify interface to use for WireGuard. Default is 'nordlynx'. Applicable only for WireGuard.\n"
+    printf "  -b | --db-location < github | local >,\tSpecify location of the database. Default is 'github'.\n"
     printf "\nExamples:\n"
     printf "  $0 -t openvpn -p udp -c us -r 3 -d 10 -l secret\n"
     printf "  $0 -t wireguard -p udp -c us -r 3 -d 10 -i nordlynx\n"
@@ -84,8 +86,22 @@ function verify_vpn_type() {
     fi
 }
 
+function verify_db_location() {
+    if [ ! "$1" == "github" ] && [ ! "$1" == "local" ]; then
+        logger -s "($0) Database location must be either github or local, your input was: $1."
+        exit 1
+    else
+        echo $1
+    fi
+}
+
 function country_code() {
-    identifier=$(wget -q -O - "https://raw.githubusercontent.com/urishx/vpn-profile-switcher/db/countries.tsv" | grep -iw "$1" | awk -F '\t' '/[0-9]+/{print $1}')
+    if [ "$db_location" == "github" ]; then
+        identifier=$(wget -q -O - "https://raw.githubusercontent.com/urishx/vpn-profile-switcher/db/countries.tsv")
+    else
+        identifier=$(cat ./db/countries.tsv)
+    fi
+    identifier=$(echo $identifier | grep -iw "$1" | awk -F '\t' '/[0-9]+/{print $1}')
 
     if [ -z "$identifier" ]; then
         logger -s "($0) The query you entered ("$1") could not be found in the countries databse."
@@ -97,7 +113,12 @@ function country_code() {
 }
 
 function server_groups() {
-    identifier=$(wget -q -O - "https://raw.githubusercontent.com/urishx/vpn-profile-switcher/db/server-groups.tsv" | grep -iw "$1" | awk -F '\t' '/.*/{print $2}')
+    if [ "$db_location" == "github" ]; then
+        identifier=$(wget -q -O - "https://raw.githubusercontent.com/urishx/vpn-profile-switcher/db/server-groups.tsv")
+    else
+        identifier=$(cat ./db/server-groups.tsv)
+    fi
+    identifier=$(echo $identifier | grep -iw "$1" | awk -F '\t' '/.*/{print $2}')
 
     if [ -z "$identifier" ]; then
         logger -s "($0) The query you entered ("$1") could not be found in the server groups databse."
@@ -333,6 +354,13 @@ function unset_variables() {
     unset nordvpn_files
     unset X
     unset is_equal
+    unset _url
+    unset _json
+    unset _comp_load
+    unset _rec_load
+    unset _distance
+    unset public_key
+    unset identifier
 }
 
 ### RUN ###
@@ -376,6 +404,14 @@ while [ ! -z "$1" ]; do
     -l | --login-info)
         shift
         secret="$1"
+        ;;
+    -i | --interface)
+        shift
+        wg_iface="$1"
+        ;;
+    -b | --db-location)
+        shift
+        db_location=$(verify_db_location $1)
         ;;
     *)
         logger -s "($0) Incorrect input provided"

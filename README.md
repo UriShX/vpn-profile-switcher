@@ -5,6 +5,7 @@
 Two more scripts are included as well: 
 1. a script for getting the credentials from NordvPN's API.
 2. a script for checking the "protection" status of the connection, like in [NordVPN's site](https://nordvpn.com/what-is-my-ip/).
+3. a script for creating a local pseudo-database of countries and server groups.
 
 ## Description
 ### `vpn-profile-switcher.sh`
@@ -21,13 +22,15 @@ The script scrubs unused profiles by removing them from the OpenWRT OpenVPN conf
 The reason for saving at least the last used profile is that from my experience, sometimes a recommended server is actually too busy to operate reliably. In that case, switching to the last known good profile provides a good alternative, giving the opportunity to request a different server once again. _This should probably be written in a script that'll replace NordVPN's keep-alive script_. \
 Only the currently used and the previous profiles are kept on the device. _An additional option for keeping more profiles on the device is planned, suggestions welcomed_.
 
+#### About the database
+The [countries](https://github.com/UriShX/vpn-profile-switcher/blob/db/countries.tsv) in which NordVPN operates servers, and the [server groups](https://github.com/UriShX/vpn-profile-switcher/blob/db/server-groups.tsv) are used to check for viable combinations. These tables can either be retrieved from this repository, in the [db](https://github.com/UriShX/vpn-profile-switcher/tree/db) branch, or generated locally by the `get_groups_and_countries_to_tsv.sh` script. The default is currently set to getting the db files from GitHub. \
+The [group-countries.tsv](https://github.com/UriShX/vpn-profile-switcher/blob/db/group-countries.tsv) table displays the possible combinations, and can be generated locally as well. \
 
-[//]: # TODO add a script for for creating the countries and groups locally
-
-The [countries](https://github.com/UriShX/vpn-profile-switcher/blob/db/countries.tsv) in which NordVPN operates servers, and the [server groups](https://github.com/UriShX/vpn-profile-switcher/blob/db/server-groups.tsv) are retrieved from this repository, in the [db](https://github.com/UriShX/vpn-profile-switcher/tree/db) branch. \
-The [group-countries.tsv](https://github.com/UriShX/vpn-profile-switcher/blob/db/group-countries.tsv) table displays the possible combinations. \
+##### About the database update
 The db branch is configured to be [updated every 15 minutes](https://github.com/UriShX/vpn-profile-switcher/blob/main/.github/workflows/main.yml) by a [Github action](https://github.com/UriShX/curl-then-jq-shell-action). In practice, the Github scheduling (for free repositories at least) runs the action at best once an hour. Not ideal, but until I figure out a better filtering system that doesn't require installing [JQ](https://stedolan.github.io/jq/) (~93 kB) on the router, scraping NordVPN's API on a remote machine seems like a better approach for the meantime.\
 **_Please notice: It appears that the API lists different servers at different times, so re-check if you couldn't get to the servers you wanted to connect to._**
+
+**Note: If you want to use the script with the locally generated database, you will need to change the `db_location` variable in the script to `local`.**
 
 #### About server groups and server group + country combinations
 
@@ -81,12 +84,19 @@ This script is a preliminary version, and is meant to be run from the command li
 
 I plan to add DNS leak protection, and a check for the connection's speed, as well as a check for the connection's stability. In this way, the script can be used to check the connection's status before running the `vpn-profile-switcher.sh` script.
 
+### `get_groups_and_countries_to_tsv.sh`
+
+This script is meant to be run from the command line or from a cron job, and generates the `countries.tsv`, `server-groups.tsv`, and `group-countries.tsv` tables.\
+
+The script uses `wget` and `jsonfilter` to get the data from NordVPN's API, and then formats the data into a tab-separated table. The tables are then saved to the `db` subfloder from where the script is run.\
+
+The tables are then used by the `vpn-profile-switcher.sh` script to check for viable combinations of server groups and countries.
+
 ## Installation
 
 ### `vpn-profile-switcher.sh`
 
 The script relies on [OpenWRT's](https://openwrt.org/start) ([BusyBox](https://www.busybox.net/downloads/BusyBox.html)) built-in `wget` and [`jsonfilter`](https://openwrt.org/docs/guide-developer/jshn#jsonfilter), but depends on several other packages. Check how much free space you have on your device either from LuCI (system -> software) or from shell by running `df` and looking at the `/overlay` line. You can compare the space left to the list of requirements below.
-
 
 1. Basic install for OpenVPN or WireGuard: \
   Follow these steps to get a basic OpenVPN or WireGuard connection set up on your router. 
@@ -99,7 +109,8 @@ The script relies on [OpenWRT's](https://openwrt.org/start) ([BusyBox](https://w
       1. Install WireGuard and LuCI support by running `opkg update` and then `opkg install luci-proto-wireguard wireguard-tools kmod-wireguard`.
       2. Install `wget-ssl` by running `opkg install wget-ssl`.
       3. Go to NordVPN's [Account dashboard](https://my.nordaccount.com/dashboard/nordvpn/manual-configuration/) and click **Set up NordVPN manually**, verify your email, and generate a new token. Save the token to a file on your router, eg.: `/etc/nordvpn_access_token`.
-      4. Run `./get_nordvpn_credentials.sh -t /etc/nordvpn_access_token -v wireguard -c` to get the WireGuard private key and set up the WireGuard interface. The script will create a new interface named `nordlynx` with the private key. 
+      4. Download the `get_nordvpn_credentials.sh` script to your router by running `wget https://raw.githubusercontent.com/UriShX/vpn-profile-switcher/dev/get_nordvpn_credentials.sh`, and change the permissions by running `chmod +x get_nordvpn_credentials.sh`.
+      5. Run `./get_nordvpn_credentials.sh -t /etc/nordvpn_access_token -v wireguard -c` to get the WireGuard private key and set up the WireGuard interface. The script will create a new interface named `nordlynx` with the private key. 
       </details>
 1. Log in to your router's shell, eg.: `ssh root@192.168.1.1`.
 2. Run the following command on your remote shell to check whether `wget` can be used to send `GET` requests: \
@@ -110,9 +121,36 @@ The script relies on [OpenWRT's](https://openwrt.org/start) ([BusyBox](https://w
    you will need to install `libustream*tls*` and its dependencies. - Run `opkg update` - Then `opkg list libustream*` - Look for `libustream-.*tls.*`, copy the package name, and install it by running `opkg install <the-package-name-you-copied>`. \
     eg.: `opkg install libustream-mbedtls20150806` on my TP-Link Archer C20i w/ OpenWRT v19.07.5. - Re-check step 3, to see you now get the table of countries.
 5. Downloading the script and first run:
-   - Run `wget https://raw.githubusercontent.com/UriShX/vpn-profile-switcher/main/vpn-profile-switcher.sh` to download the script to your router.
+   - Run `wget https://raw.githubusercontent.com/UriShX/vpn-profile-switcher/dev/vpn-profile-switcher.sh` to download the script to your router.
    - Run `chmod +x vpn-profile-switcher.sh`.
    - Test the script by running `./vpn-profile-switcher.sh`.
+
+### `get_nordvpn_credentials.sh`
+
+See the 'WireGuard' dropdown under `installation > vpn-profile-switcher.sh` above for the installation steps.
+
+### `vpn-status-checker-openwrt.sh`
+
+1. Log in to your router's shell, eg.: `ssh root@192.168.1.1`.
+2. Run `wget https://raw.githubusercontent.com/UriShX/vpn-profile-switcher/dev/vpn-status-checker-openwrt.sh` to download the script to your router.
+3. Run `chmod +x vpn-status-checker-openwrt.sh`.
+4. Test the script by running `./vpn-status-checker-openwrt.sh`.
+5. If you get an output like this:
+   > IP:
+    > ISP: NordVPN
+    > Location
+    > Status: Protected (VPN detected)
+    you're all set.
+
+### `get_groups_and_countries_to_tsv.sh`
+
+1. Log in to your router's shell, eg.: `ssh root@
+2. Run `wget https://raw.githubusercontent.com/UriShX/vpn-profile-switcher/dev/get_groups_and_countries_to_tsv.sh` to download the script to your router.
+3. Run `chmod +x get_groups_and_countries_to_tsv.sh`.
+4. Run `./get_groups_and_countries_to_tsv.sh` to generate the tables.
+5. Check the tables by running `cat countries.tsv`, `cat server-groups.tsv`, and `cat group-countries.tsv`.
+6. If you see the tables, you're all set.
+7. If you want to use the tables locally, change the `db_location` variable in the `vpn-profile-switcher.sh` script to `local`.
 
 #### Requirements
 
@@ -135,27 +173,28 @@ The script relies on [OpenWRT's](https://openwrt.org/start) ([BusyBox](https://w
 
 Run `./vpn-profile-switcher.sh -h` to list the available parameters:
 
->vpn-profile-switcher.sh v1.1.0
->Get NordVPN recommended profile and set OpenVPN or WireGuard on OpenWRT to use said profile.
->
->Usage: ./vpn-profile-switcher.sh [options <parameters>]
->
->Options:
->  -h | --help,				Print this help message
->  -t | --type < openvpn | wireguard >,	Select either OpenVPN or WireGuard. Default is OpenVPN.
->  -p | --protocol < udp | tcp >,	Select either UDP or TCP connection. Default is UDP, and it is the only choice for WireGuard.
->  -c | --country < code | name >,	Select Country to filter by. Default is closest to your location.
->  -g | --group < group_name >,		Select group to filter by.
->  -r | --recommendations < number >,	Number of recommendations to ask from NordVPN API.
->  -d | --distance < number >,		Minimal load distance between recommended server and current configuration.
->  -l | --login-info < filename >,	Specify file for VPN login credentials. Default is 'secret' (stored in /etc/openvpn/). Applicable only for OpenVPN.
->  -i | --interface < interface >,	Specify interface to use for WireGuard. Default is 'nordlynx'. Applicable only for WireGuard.
->
->Examples:
->  ./vpn-profile-switcher.sh -t openvpn -p udp -c us -r 3 -d 10 -l secret
->  ./vpn-profile-switcher.sh -t wireguard -p udp -c us -r 3 -d 10 -i nordlynx
->
->For more information see README in repo: https://github.com/UriShX/vpn-profile-switcher
+> vpn-profile-switcher.sh v1.1.1
+> Get NordVPN recommended profile and set OpenVPN or WireGuard on OpenWRT to use said profile.
+> 
+> Usage: ./vpn-profile-switcher.sh [options <parameters>]
+> 
+> Options:
+>   -h | --help,					Print this help message
+>   -t | --type < openvpn | wireguard >,		Select either OpenVPN or WireGuard. Default is OpenVPN.
+>   -p | --protocol < udp | tcp >,		Select either UDP or TCP connection. Default is UDP, and it is the only choice for WireGuard.
+>   -c | --country < code | name >,		Select Country to filter by. Default is closest to your location.
+>   -g | --group < group_name >,			Select group to filter by.
+>   -r | --recommendations < number >,		Number of recommendations to ask from NordVPN API.
+>   -d | --distance < number >,			Minimal load distance between recommended server and current configuration.
+>   -l | --login-info < filename >,		Specify file for VPN login credentials. Default is 'secret' (stored in /etc/openvpn/). Applicable only for OpenVPN.
+>   -i | --interface < interface >,		Specify interface to use for WireGuard. Default is 'nordlynx'. Applicable only for WireGuard.
+>   -b | --db-location < github | local >,	Specify location of the database. Default is 'github'.
+> 
+> Examples:
+>   ./vpn-profile-switcher.sh -t openvpn -p udp -c us -r 3 -d 10 -l secret
+>   ./vpn-profile-switcher.sh -t wireguard -p udp -c us -r 3 -d 10 -i nordlynx
+> 
+> For more information see README in repo: https://github.com/UriShX/vpn-profile-switcher
 
 #### Script parameters
 
@@ -217,27 +256,34 @@ Has to be followed by interface name. \
 Specify interface to use for WireGuard. Default is 'nordlynx', as is also the default for the `get_nordvpn_credentials.sh` script. \
 I tried avoiding using the `wg0` interface, as it is the most commonly used for WireGuard in tutorials, and I wanted to avoid any conflicts.
 
+##### `-b` or `--db-location`
+
+Has to be followed by either `github` or `local` (lowercase). \
+Specify location of the database. \
+Default is 'github', as the tables are updated every 15 minutes by a Github action. \
+If you want to use the tables locally, change the `db_location` variable in the script to `local`.
+
 ### `get_nordpn_credentials.sh`
 
 Run `./get_nordpn_credentials.sh -h` to list the available parameters:
->get_nordvpn_credentials.sh v1.0.0
->Get NordVPN credentials and save OpenVPN 'secret' file or set a WireGuard interface with it.
->
->Usage: ./get_nordvpn_credentials.sh [options <parameters>] (access_token)
->
->Options:
->  -h | --help,						Print this help message
->  -v | --vpn_type < openvpn | wireguard >, 		Select either OpenVPN or WireGuard. Default is wireguard.
->  -t | --token < path/to/nordvpn_access_token >,	Path to the file containing the NordVPN access token.
->  -w | --wireguard_interface < interface_name >,	Name of the WireGuard interface. Default is 'nordlynx'.
->  -c | --create,					Create a new WireGuard interface with the provided name OR the OpenVPN 'secret' file.
->  access_token,					The NordVPN access token. This is not required if the -t option is used.
->
->If no options are provided, the script will assume the access token is the first argument.
->
->Example: ./get_nordvpn_credentials.sh -t /etc/nordvpn_access_token -v openvpn
->
->For more information see README in repo: https://github.com/UriShX/vpn-profile-switcher
+> get_nordvpn_credentials.sh v1.0.0
+> Get NordVPN credentials and save OpenVPN 'secret' file or set a WireGuard interface with it.
+> 
+> Usage: ./get_nordvpn_credentials.sh [options <parameters>] (access_token)
+> 
+> Options:
+>   -h | --help,						Print this help message
+>   -v | --vpn_type < openvpn | wireguard >, 		Select either OpenVPN or WireGuard. Default is wireguard.
+>   -t | --token < path/to/nordvpn_access_token >,	Path to the file containing the NordVPN access token.
+>   -w | --wireguard_interface < interface_name >,	Name of the WireGuard interface. Default is 'nordlynx'.
+>   -c | --create,					Create a new WireGuard interface with the provided name OR the OpenVPN 'secret' file.
+>   access_token,					The NordVPN access token. This is not required if the -t option is used.
+> 
+> If no options are provided, the script will assume the access token is the first argument.
+> 
+> Example: ./get_nordvpn_credentials.sh -t /etc/nordvpn_access_token -v openvpn
+> 
+> For more information see README in repo: https://github.com/UriShX/vpn-profile-switcher
 
 #### Script parameters
 
@@ -270,10 +316,15 @@ Just run `./vpn-status-checker-openwrt.sh` to check the connection's status. \
 The script will output the status of the connection, and the IP address of the device.
 
 Example output:
->IP: 31.187.78.100
->ISP: NordVPN
->Location: Tel Aviv, Israel
->Status: Protected (VPN detected)
+> IP: 31.187.78.100
+> ISP: NordVPN
+> Location: Tel Aviv, Israel
+> Status: Protected (VPN detected)
+
+### `get_groups_and_countries_to_tsv.sh`
+
+Just run `./get_groups_and_countries_to_tsv.sh` to generate the tables. \
+The script will output the time it took to generate the tables to both the screen and the system log.
 
 ## Examples
 
@@ -369,6 +420,31 @@ Output:
 > Nordlynx private key: <your key>
 > Please set the port to 51820 and the addresses to 10.5.0.2/32 in the WireGuard interface configuration.
 > root: (./get_nordvpn_credentials.sh) WireGuard private key echoed to stdout.
+
+
+### `get_groups_and_countries_to_tsv.sh`
+
+```root
+./get_groups_and_countries_to_tsv.sh
+```
+
+Output:
+> root: (./get_groups_and_countries_to_tsv.sh) Script took 23 seconds to complete.
+
+#### Scheduling with crontab
+
+It is possible to use crontab for maintaining the tables. In this basic example, the script runs once a day (at midnight) to generate the tables.
+
+```bash
+0 0 * * * /root/get_groups_and_countries_to_tsv.sh
+```
+
+The output will be displayed in the system log, like so:
+
+> Wed Jan 13 23:02:00 2021 cron.info crond[22011]: USER root pid 22868 cmd /root/get_groups_and_countries_to_tsv.sh \
+> Wed Jan 13 23:02:00 2021 user.notice root: (/root/get_groups_and_countries_to_tsv.sh) Script took 23 seconds to complete.
+
+See `Examples > vpn-profile-switcher.sh > Schedueling with crontab` above for more details on using crontab.
 
 ## Contributing
 

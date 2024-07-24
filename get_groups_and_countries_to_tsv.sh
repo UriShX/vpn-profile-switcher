@@ -72,6 +72,6 @@ end_time=$(date +%s)
 duration=$((end_time - start_time))
 
 # Output the results
-logger -s "Script took $duration seconds to complete."
+logger -s "($0) Script took $duration seconds to complete."
 
 unset start_time end_time duration GROUPS_DATA COUNTRIES_DATA COUNTRIES IDS CODES X
